@@ -13,7 +13,7 @@ import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
 contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
-    address public merge;
+    address public merge; //TODO : Should we have two merge addresses? one for wewe and one for tgt?
     bool public locked;
 
     error InvalidToAddress();
