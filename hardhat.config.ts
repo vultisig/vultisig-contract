@@ -18,6 +18,11 @@ const config: HardhatUserConfig = {
       chainId: 11155111,
       accounts: [vars.get("DEPLOYER_KEY")],
     },
+    arbitrumOne: {
+      url: 'https://arb1.arbitrum.io/rpc',
+      accounts: [vars.get("VULT_TEMP_DEPLOYER_KEY")],
+      chainId: 42161,
+    },
     mainnet: {
       url: `https://eth-mainnet.g.alchemy.com/v2/${vars.get("VULTISIG_ALCHEMY_KEY")}`,
       chainId: 1,
@@ -33,6 +38,7 @@ const config: HardhatUserConfig = {
     apiKey: {
       mainnet: vars.get("MAINNET_KEY"),
       base: vars.get("BASE_KEY"),
+      arbitrumOne: vars.get("ARBISCAN_API_KEY"),
     },
   },
   typechain: {
