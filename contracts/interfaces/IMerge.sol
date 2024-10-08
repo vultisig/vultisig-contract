@@ -12,4 +12,5 @@ interface IMerge {
     error VultToWeweNotAllwed();
     error InvalidTokenReceived();
     error ZeroAmount();
+    error TooEarlyToClaimRemainingVult();
 }

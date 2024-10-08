@@ -21,7 +21,14 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
     uint256 public constant VULT_IOU = 12_500_000 * 10**18; // 12.5% of MAX_VULT
     uint256 public immutable launchTime;
 
+    mapping(address => uint256) public claimableVult;
+    mapping(address => uint256) public totalClaimedVultPerUser;
+    uint256 public totalVultClaimed;
+    uint256 public remainingVultAfter1Year;
+
+
     LockedStatus public lockedStatus;
+    uint256 public claimStatus;
 
     constructor(address _tgt, address _vult) {
         tgt = IERC20(_tgt);
@@ -33,7 +40,6 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
     function onTokenTransfer(
         address from,
         uint256 amount,
-        //address token,
         bytes calldata extraData
     ) external nonReentrant {
         if (msg.sender != address(tgt)) {
@@ -42,25 +48,33 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         if (lockedStatus == LockedStatus.Locked) {
             revert MergeLocked();
         }
-        if (amount == 0) {
+        /*if (amount == 0) {
             revert ZeroAmount();
-        }
+        }*/ //removed this to enable claiming, is this ok?
+
         // tgt in, vult out
         uint256 vultOut = quoteVult(amount);
-        //tgt already transferred
-        vult.safeTransfer(from, vultOut);
         vultBalance -= vultOut;
-    }
-
-    //faire en sorte que le vult ne soit pas transferable sur uniswap
-    
+        //tgt already transferred
+        if (claimStatus == 0) {
+            claimableVult[from] += vultOut;
+        } 
+        if (claimStatus == 1) {
+            uint256 totalVultToTransfer = claimableVult[from] + vultOut;
+            vult.safeTransfer(from, totalVultToTransfer);
+            totalVultClaimed += totalVultToTransfer;
+            totalClaimedVultPerUser[from] += totalVultToTransfer;
+            claimableVult[from] = 0;
+            
+        }
+    }    
 
     function deposit(IERC20 token, uint256 amount) external onlyOwner {
         if (token != vult) {
             revert InvalidTokenReceived();
         }
 
-        token.safeTransferFrom(msg.sender, address(this), amount);
+        token.safeTransferFrom(msg.sender, address(this), amount); //TODO : should we enforce that the deposited amount is 12_500_000 * 10**18 ?
         vultBalance += amount; //TODO : maybe make the initial transfer at contract initialisation? so there is no need to have a deposit function
 
         }
@@ -72,8 +86,34 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         token.safeTransfer(owner(), amount);
     }
 
+    function withdrawRemainingVult() external nonReentrant() {
+        if (block.timestamp- launchTime < 360 days) {
+            revert TooEarlyToClaimRemainingVult();
+        }  
+        if (remainingVultAfter1Year == 0) {
+            remainingVultAfter1Year = vult.balanceOf(address(this));
+        }
+        vult.safeTransfer(msg.sender, (totalClaimedVultPerUser[msg.sender] * remainingVultAfter1Year) / totalVultClaimed);
+    }
+
     function setLockedStatus(LockedStatus newStatus) external onlyOwner {
         lockedStatus = newStatus;
+    }
+
+    function setClaimStatus(uint256 newStatus) external onlyOwner {
+        claimStatus = newStatus;
+    }
+
+    function getClaimStatus() external view returns (uint256) {
+        return claimStatus;
+    }
+
+    function getClaimableVult(address user) external view returns (uint256) {
+        return claimableVult[user];
+    }
+
+    function gettotalClaimedVultPerUser(address user) external view returns (uint256) {
+        return totalClaimedVultPerUser[user];
     }
 
     function quoteVult(uint256 t) public view returns (uint256 v) {
@@ -81,9 +121,8 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         if (timeSinceLaunch < 90 days) {
             v = (t * VULT_IOU) / TGT_TO_EXCHANGE;
         } else if (timeSinceLaunch < 360 days) {
-            uint256 remainingtime = 360 days  - timeSinceLaunch;
-            //uint256 rate = remainingtime / 270 days; //270 days = 9 months
-            v = (t * VULT_IOU * remainingtime) / (TGT_TO_EXCHANGE * 270 days);
+            uint256 remainingtime = 360 days  - timeSinceLaunch; 
+            v = (t * VULT_IOU * remainingtime) / (TGT_TO_EXCHANGE * 270 days); //270 days = 9 months
         } else {
             v = 0;
         }

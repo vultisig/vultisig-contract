@@ -65,7 +65,7 @@ describe("Merge Contract", function () {
       await expect(tgt.transferAndCall(mergeTgt, 1000, "0x")).to.be.revertedWithCustomError(mergeTgt, "MergeLocked");
     });
 
-    it("Should revert if amount is zero", async function () {
+    it("Should not revert if amount is zero", async function () {
       const { owner, mergeTgt, tgt } = await loadFixture(deployFixture);
       await mergeTgt.setLockedStatus(1);
 
@@ -75,7 +75,7 @@ describe("Merge Contract", function () {
       await tgt.mintFinish();
       await tgt.approve(owner, 1000);
 
-      await expect(tgt.transferAndCall(mergeTgt, 0, "0x")).to.be.revertedWithCustomError(mergeTgt, "ZeroAmount");
+      await tgt.transferAndCall(mergeTgt, 0, "0x");
     });
 
     it("Should correctly transfer Tgt", async function () {
@@ -95,16 +95,19 @@ describe("Merge Contract", function () {
 
       await tgt.transfer(otherAccount, TgtDeposit);
       await vult.setMerge(mergeTgt);
-
-      console.log("otherAccount address:", otherAccount.address);
-      console.log("MergeTgt address:", await mergeTgt.getAddress());
-      console.log("VULT balance of MergeTGT before transfer:", (await vult.balanceOf(mergeTgt)).toString()); //1_250_000 x 1e18
+      
 
       await tgt.connect(otherAccount).approve(otherAccount, TgtDeposit);
       
       // Perform the transfer
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal("125000000000000000000000");
+
+      await mergeTgt.setClaimStatus(1);
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, 0, "0x"))
+      .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal(0);
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
       expect(await mergeTgt.vultBalance()).to.equal("1125000000000000000000000"); //1_125_000 x 1e18
@@ -143,11 +146,117 @@ describe("Merge Contract", function () {
       // Perform the transfer
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal("111111062885802469135802");
+
+      await mergeTgt.setClaimStatus(1);
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, 0, "0x"))
+      .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal(0);
 
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
       expect(await vult.balanceOf(mergeTgt)).to.equal("1138888937114197530864198"); //1_138_888_937_114_197_530_864_198
       expect(await vult.balanceOf(otherAccount)).to.equal("111111062885802469135802");
+    });
+
+    it("Should correctly transfer Tgt before claimableStatus is set to 1", async function () {
+      const { owner, mergeTgt, otherAccount, tgt, vult } = await loadFixture(deployFixture);
+      await mergeTgt.setLockedStatus(1);
+
+      let acc = new Array(owner.address);
+      let amount = new Array(initialSupply.toString());
+      await tgt.mint(acc, amount);
+      await tgt.mintFinish();
+
+      const vultAmount = 1_250_000n * ethers.parseEther("1");
+      const TgtDeposit = 6_570_000n * ethers.parseEther("1");
+
+      await vult.approve(mergeTgt, vultAmount);
+      await mergeTgt.deposit(vult, vultAmount);
+
+      await tgt.transfer(otherAccount, TgtDeposit);
+      await tgt.transfer(otherAccount, TgtDeposit);
+      await tgt.transfer(otherAccount, TgtDeposit);
+      await tgt.transfer(otherAccount, TgtDeposit);
+      await vult.setMerge(mergeTgt);
+
+
+      await tgt.connect(otherAccount).approve(otherAccount, BigInt(4) * TgtDeposit);
+      
+      // Perform the transfer
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
+        .to.not.be.reverted;
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
+        .to.not.be.reverted;
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
+        .to.not.be.reverted;
+
+      await mergeTgt.setClaimStatus(1);
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
+      .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal(0);
+
+      // Assertions
+      expect(await tgt.balanceOf(mergeTgt)).to.equal(BigInt(4) * TgtDeposit);
+      expect(await vult.balanceOf(mergeTgt)).to.equal("750000000000000000000000"); 
+      expect(await vult.balanceOf(otherAccount)).to.equal("500000000000000000000000");
+    });
+
+    it("Should correctly withdraw remaining vults", async function () {
+      const {mergeTgt, tgt, vult } = await loadFixture(deployFixture);
+      const [owner, otherAccount1, otherAccount2] = await ethers.getSigners();
+      await mergeTgt.setLockedStatus(1);
+
+      let acc = new Array(owner.address);
+      let amount = new Array(initialSupply.toString());
+      await tgt.mint(acc, amount);
+      await tgt.mintFinish();
+
+      const vultAmount = 1_250_000n * ethers.parseEther("1");
+      const TgtDeposit1 = 9_855_000n * ethers.parseEther("1");
+      const TgtDeposit2 = 3_285_000n * ethers.parseEther("1");
+      await vult.approve(mergeTgt, vultAmount);
+      await mergeTgt.deposit(vult, vultAmount);
+
+      await tgt.transfer(otherAccount1, TgtDeposit1);
+      await tgt.transfer(otherAccount2, TgtDeposit2);
+      await vult.setMerge(mergeTgt);
+
+
+      await tgt.connect(otherAccount1).approve(otherAccount1, TgtDeposit1);
+      await tgt.connect(otherAccount2).approve(otherAccount2, TgtDeposit2);
+      
+      // Perform the transfer
+      await expect(tgt.connect(otherAccount1).transferAndCall(mergeTgt, TgtDeposit1, "0x"))
+        .to.not.be.reverted;
+      await expect(tgt.connect(otherAccount2).transferAndCall(mergeTgt, TgtDeposit2, "0x"))
+        .to.not.be.reverted;
+
+      await mergeTgt.setClaimStatus(1);
+      await expect(tgt.connect(otherAccount1).transferAndCall(mergeTgt, 0, "0x"))
+      .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount1)).to.equal(0);
+      await expect(tgt.connect(otherAccount2).transferAndCall(mergeTgt, 0, "0x"))
+      .to.not.be.reverted;
+      expect(await mergeTgt.getClaimableVult(otherAccount2)).to.equal(0);
+
+      expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit1 + TgtDeposit2);
+      expect(await vult.balanceOf(mergeTgt)).to.equal("1000000000000000000000000"); 
+      expect(await vult.balanceOf(otherAccount1)).to.equal("187500000000000000000000");
+      expect(await vult.balanceOf(otherAccount2)).to.equal("62500000000000000000000");
+
+      // Advance time by 365 days
+      await ethers.provider.send("evm_increaseTime", [365 * 24 * 60 * 60]);
+      await ethers.provider.send("evm_mine");
+
+      // Attempt to withdraw remaining VULT for both accounts
+      await expect(mergeTgt.connect(otherAccount1).withdrawRemainingVult()).to.not.be.reverted;
+      await expect(mergeTgt.connect(otherAccount2).withdrawRemainingVult()).to.not.be.reverted;
+      // Assertions
+      expect(await vult.balanceOf(mergeTgt)).to.equal("0"); 
+      expect(await vult.balanceOf(otherAccount1)).to.equal("937500000000000000000000");
+      expect(await vult.balanceOf(otherAccount2)).to.equal("312500000000000000000000");
+      
     });
   });
 
