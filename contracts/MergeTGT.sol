@@ -5,7 +5,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import {IWeweReceiver} from "./interfaces/IWeweReceiver.sol";
 import {IERC677Receiver} from "./interfaces/IERC677Receiver.sol";
 import {IMerge} from "./interfaces/IMerge.sol";
 
