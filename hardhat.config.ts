@@ -1,6 +1,7 @@
 import { HardhatUserConfig, vars } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
 import "hardhat-erc1820"; // ERC777 is interacting with ERC1820 registry
+import "@openzeppelin/hardhat-upgrades"; // Add this line
 
 const config: HardhatUserConfig = {
   solidity: {
