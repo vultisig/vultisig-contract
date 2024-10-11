@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 //import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {IERC1363} from "./interfaces/IERC1363.sol";
+
 
 //import "hardhat/console.sol";
 
@@ -20,7 +22,7 @@ import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
  * Every time `updateReward(token)` is called, We distribute the balance of that tokens as rewards to users that are
  * currently staking inside this contract, and they can claim it using `withdraw(0)`
  */
-contract TokenIOUStaking is Ownable, ReentrancyGuard {
+contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
     using SafeERC20 for IERC20;
 
     /// @notice Info of each user
@@ -399,7 +401,7 @@ contract TokenIOUStaking is Ownable, ReentrancyGuard {
     function claimExtraRewards() public nonReentrant {
         UserInfo storage user = userInfo[_msgSender()];
         uint256 _stakingMultiplier = getStakingMultiplier(_msgSender());
-        require(_stakingMultiplier == 1e18 && user.amount > 350_000, "TokenIOUStaking: not eligible for extra rewards");
+        require(_stakingMultiplier == 1e18 && user.amount > 350_000, "tokenIOUStaking: not eligible for extra rewards");
 
         uint256 _len = rewardTokens.length;
         for (uint256 i; i < _len; i++) {

@@ -8,7 +8,7 @@ const {loadFixture} = require("@nomicfoundation/hardhat-network-helpers");
 
 //const hre = require("hardhat");
 const {utils} = require("ethers");
-import { parseEther, formatEther, formatUnits } from "ethers";
+import { parseEther, formatEther, formatUnits, toBigInt } from "ethers";
 
 describe("TokenIOU Staking", function () {
 
@@ -89,6 +89,8 @@ describe("TokenIOU Staking", function () {
         await tokenIOU.connect(joe).approve(joeStaking.getAddress(), parseEther("100000"));
 
         await tokenIOU.setLocked(false);
+        await tokenIOU.setStaking(await tokenIOUStaking.getAddress());
+        await tokenIOU.setTradingAllowed(true); //we are not testing this feature here
 
         return {
             tokenIOUStaking,
@@ -119,7 +121,11 @@ describe("TokenIOU Staking", function () {
                 carol
             } = await loadFixture(deployFixture);
 
+            console.log("PRINT00");
+
             await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
+
+            console.log("PRINT0");
 
             expect(await tokenIOU.balanceOf(alice.address)).to.be.equal(parseEther("900"));
             console.log("PRINT1");
@@ -1486,9 +1492,7 @@ describe("TokenIOU Staking", function () {
             const bobPendingReward = await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress());
             const carolPendingReward = await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress());
 
-            const totalPendingReward = ethers.BigNumber.from(alicePendingReward)
-                .add(bobPendingReward)
-                .add(carolPendingReward);
+            const totalPendingReward = toBigInt(alicePendingReward) + toBigInt(bobPendingReward) + toBigInt(carolPendingReward);
 
             const stakingBalance = await rewardToken.balanceOf(await tokenIOUStaking.getAddress());
 
@@ -1535,9 +1539,9 @@ describe("TokenIOU Staking", function () {
             console.log("Pending reward for Carol: " + formatUnits(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()), 18));
 
             //Total pending reward amount can't exceed the reward pool balance
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
         });
@@ -1581,34 +1585,34 @@ describe("TokenIOU Staking", function () {
             console.log("Pending reward for Carol: " + formatUnits(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()), 18));
 
             //Total pending reward amount can't exceed the reward pool balance
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
             await tokenIOUStaking.connect(bob).deposit(parseEther("200"));
 
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
             await tokenIOUStaking.connect(alice).deposit(parseEther("300"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
             increase(86400 * 5);
 
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
             await tokenIOUStaking.connect(bob).withdraw(parseEther("0"));
             increase(86400 * 5);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("200"));
 
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
         });
@@ -1634,16 +1638,16 @@ describe("TokenIOU Staking", function () {
             await joeStaking.connect(bob).deposit(parseEther("10"));
             await joeStaking.connect(carol).deposit(parseEther("10"));
             await joeStaking.connect(carol).deposit(parseEther("1"));
-            await rewardToken.connect(tokenIOUMaker).transfer(joeStaking.address, parseEther("10"));
+            await rewardToken.connect(tokenIOUMaker).transfer(await joeStaking.getAddress(), parseEther("10"));
             await joeStaking.connect(carol).deposit(parseEther("3000"));
             await increase(86400 * 10);
-            await rewardToken.connect(tokenIOUMaker).transfer(joeStaking.address, parseEther("10"));
+            await rewardToken.connect(tokenIOUMaker).transfer(await joeStaking.getAddress(), parseEther("10"));
 
-            console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(joeStaking.address)));
+            console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await joeStaking.getAddress())));
 
             // await joeStaking.connect(bob).deposit(parseEther("1100"));
 
-            console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(joeStaking.address)));
+            console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await joeStaking.getAddress())));
 
             console.log("Pending reward for Alice: " + formatUnits(await joeStaking.pendingReward(alice.address, await rewardToken.getAddress()), 18));
             console.log("--------------------------------------");
@@ -1652,10 +1656,10 @@ describe("TokenIOU Staking", function () {
             console.log("Pending reward for Carol: " + formatUnits(await joeStaking.pendingReward(carol.address, await rewardToken.getAddress()), 18));
 
             //Total pending reward amount can't exceed the reward pool balance
-            expect((await joeStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await joeStaking.pendingReward(carol.address, await rewardToken.getAddress()))
-            ).to.be.lte(await rewardToken.balanceOf(joeStaking.address));
+            expect(toBigInt(await joeStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await joeStaking.pendingReward(carol.address, await rewardToken.getAddress())))
+            ).to.be.lte(await rewardToken.balanceOf(await joeStaking.getAddress()));
 
         });
 
@@ -1704,9 +1708,9 @@ describe("TokenIOU Staking", function () {
             console.log("Pending reward for Carol: " + formatUnits(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()), 18));
 
             //Total pending reward amount can't exceed the reward pool balance
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
         });
@@ -1766,9 +1770,9 @@ describe("TokenIOU Staking", function () {
             console.log("Reward debt for Carol: " + formatEther(userInfo[1]));
 
             // Total pending reward amount can't exceed the reward pool balance
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
         });
@@ -1788,12 +1792,12 @@ describe("TokenIOU Staking", function () {
             await joeStaking.connect(alice).deposit(parseEther("100"));
             await joeStaking.connect(carol).deposit(parseEther("100"));
 
-            await rewardToken.connect(tokenIOUMaker).transfer(joeStaking.address, parseEther("100"));
+            await rewardToken.connect(tokenIOUMaker).transfer(await joeStaking.getAddress(), parseEther("100"));
 
             /// now Bob enters, and he will only receive the rewards deposited after he entered
             await joeStaking.connect(bob).deposit(parseEther("500"));
 
-            console.log("Reward pool balance: " + (await rewardToken.balanceOf(joeStaking.address)).toString());
+            console.log("Reward pool balance: " + (await rewardToken.balanceOf(await joeStaking.getAddress())).toString());
             console.log("Pending reward for Alice: " + formatEther((await joeStaking.pendingReward(alice.address, await rewardToken.getAddress()))));
             console.log("--------------------------------------");
             console.log("Pending reward for Bob: " + formatEther(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress())));
@@ -1807,7 +1811,7 @@ describe("TokenIOU Staking", function () {
                 parseEther("0.0001")
             );
 
-            console.log("Reward pool balance: " + (await rewardToken.balanceOf(joeStaking.address)).toString());
+            console.log("Reward pool balance: " + (await rewardToken.balanceOf(await joeStaking.getAddress())).toString());
 
             await joeStaking.connect(alice).deposit(parseEther("100")); // Alice enters again to try to get more rewards
             await joeStaking.connect(alice).withdraw(parseEther("200"));
@@ -1819,20 +1823,20 @@ describe("TokenIOU Staking", function () {
                 parseEther("0.001")
             );
 
-            console.log("Reward pool balance: " + formatEther(await rewardToken.balanceOf(joeStaking.address)).toString());
+            console.log("Reward pool balance: " + formatEther(await rewardToken.balanceOf(await joeStaking.getAddress())).toString());
             console.log("Pending reward for Bob: " + formatEther(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress())));
 
             // Reward pool should have enough tokens to pay Bob
-            expect(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress())).to.be.lte(await rewardToken.balanceOf(joeStaking.address));
+            expect(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress())).to.be.lte(await rewardToken.balanceOf(await joeStaking.getAddress()));
 
             console.log("Staking deposit for Alice: " + (await joeStaking.getUserInfo(alice.address, await rewardToken.getAddress()))[0]);
             console.log("Staking deposit for Carol: " + (await joeStaking.getUserInfo(carol.address, await rewardToken.getAddress()))[0]);
             console.log("Staking deposit for Bob: " + (await joeStaking.getUserInfo(bob.address, await rewardToken.getAddress()))[0]);
 
-            await rewardToken.connect(tokenIOUMaker).transfer(joeStaking.address, parseEther("100"));
+            await rewardToken.connect(tokenIOUMaker).transfer(await joeStaking.getAddress(), parseEther("100"));
 
             console.log("Pending reward for Bob: " + formatEther(await joeStaking.pendingReward(bob.address, await rewardToken.getAddress())));
-            console.log("Reward pool balance: " + formatEther(await rewardToken.balanceOf(joeStaking.address)).toString());
+            console.log("Reward pool balance: " + formatEther(await rewardToken.balanceOf(await joeStaking.getAddress())).toString());
 
             await joeStaking.connect(bob).withdraw("0");
 
@@ -1849,7 +1853,7 @@ describe("TokenIOU Staking", function () {
             expect(await rewardToken.balanceOf(alice.address)).to.be.equal(lastAliceBalance);
 
             console.log("--------------------------------------");
-            console.log("Reward pool balance at the end: " + (await rewardToken.balanceOf(joeStaking.address)).toString());
+            console.log("Reward pool balance at the end: " + (await rewardToken.balanceOf(await joeStaking.getAddress())).toString());
             console.log("--------------------------------------");
             console.log("Staking deposit for Alice: " + (await joeStaking.getUserInfo(alice.address, await rewardToken.getAddress()))[0]);
             console.log("Reward balance for Alice at the end: " + formatEther(await rewardToken.balanceOf(alice.address)).toString());
@@ -1988,9 +1992,9 @@ describe("TokenIOU Staking", function () {
             expect(await tokenIOUStaking.forgoneRewardsPool(await tokenIOU.getAddress())).to.be.equal(parseEther("125"));
 
             //Total pending reward amount can't exceed the reward pool balance
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
         });
@@ -2057,9 +2061,9 @@ describe("TokenIOU Staking", function () {
             expect(await tokenIOUStaking.forgoneRewardsPool(await rewardToken.getAddress())).to.be.closeTo(parseEther("116.693"), parseEther("0.001"));
 
             //Total pending reward amount can't exceed the reward pool balance
-            expect((await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress()))
-                .add(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress()))
+            expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
+                +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
+                +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
         });
@@ -2078,11 +2082,11 @@ describe("TokenIOU Staking", function () {
 
             await tokenIOUStakingBasic.connect(alice).deposit(parseEther("100"));
             await tokenIOUStakingBasic.connect(bob).deposit(parseEther("200"));
-            await rewardToken.connect(tokenIOUMaker).transfer(tokenIOUStakingBasic.address, parseEther("100"));
+            await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStakingBasic.getAddress(), parseEther("100"));
             await increase(86400 * 365);
 
-            console.log("Reward USDC pool balance: ", formatEther(await rewardToken.balanceOf(tokenIOUStakingBasic.address)));
-            console.log("Before Total tokenIOU pool balance: ", formatEther(await tokenIOU.balanceOf(tokenIOUStakingBasic.address)));
+            console.log("Reward USDC pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStakingBasic.getAddress())));
+            console.log("Before Total tokenIOU pool balance: ", formatEther(await tokenIOU.balanceOf(await tokenIOUStakingBasic.getAddress())));
             console.log("--------------------------------------");
             console.log("Pending USDC reward for Alice: " + formatUnits(await tokenIOUStakingBasic.pendingReward(alice.address, await rewardToken.getAddress()), 18));
             console.log("Pending USDC reward for Bob: " + formatUnits(await tokenIOUStakingBasic.pendingReward(bob.address, await rewardToken.getAddress()), 18));
@@ -2091,11 +2095,15 @@ describe("TokenIOU Staking", function () {
             console.log("Reward balance of Bob: " + formatEther(await rewardToken.balanceOf(bob.address)));
             console.log("--------------------------------------");
 
-            // await rewardToken.connect(tokenIOUMaker).transfer(tokenIOUStakingBasic.address, parseEther("100"));
+            // await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStakingBasic.getAddress(), parseEther("100"));
             await tokenIOUStakingBasic.connect(bob).restakeRewards();
 
-            console.log("Reward USDC pool balance: ", formatEther(await rewardToken.balanceOf(tokenIOUStakingBasic.address)));
-            console.log("After Total tokenIOU pool balance: ", formatEther(await tokenIOU.balanceOf(tokenIOUStakingBasic.address)));
+            // Create an array of price quotes (you may need to adjust these values)
+            const priceQuotes = Array(1).fill(ethers.parseUnits("1")); // Assuming 1:1 ratio for simplicity
+            await tokenIOUStakingBasic.connect(bob).restakeRewards(priceQuotes);
+
+            console.log("Reward USDC pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStakingBasic.getAddress())));
+            console.log("After Total tokenIOU pool balance: ", formatEther(await tokenIOU.balanceOf(await tokenIOUStakingBasic.getAddress())));
             console.log("--------------------------------------");
             console.log("Pending USDC reward for Alice: " + formatUnits(await tokenIOUStakingBasic.pendingReward(alice.address, await rewardToken.getAddress()), 18));
             console.log("Pending USDC reward for Bob: " + formatUnits(await tokenIOUStakingBasic.pendingReward(bob.address, await rewardToken.getAddress()), 18));

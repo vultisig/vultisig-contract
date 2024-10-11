@@ -6,6 +6,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
+import "hardhat/console.sol";
 
 /**
  * @title ERC20Burnable with ERC1363 standard functions like approveAndCall, transferAndCall
@@ -14,13 +15,17 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
     address public merge; //TODO : Should we have two merge addresses? one for wewe and one for tgt?
+    address public staking;
     bool public locked;
-
+    bool public tradingAllowed;
     error InvalidToAddress();
     error TransferLocked();
+    error TradingNotAllowed();
 
     constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) {
+        tradingAllowed = true; //we allow trading only to mint, then we set it to false
         _mint(_msgSender(), 10_000_000 * 1e18);
+        tradingAllowed = false;
         _name = name_;
         _ticker = ticker_;
         locked = true;
@@ -40,9 +45,20 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
     function setMerge(address _merge) external onlyOwner {
         merge = _merge;
     }
+    function setStaking(address _staking) external onlyOwner {
+        staking = _staking;
+    }
+
+    function getStaking() external view returns (address) {
+        return staking;
+    }
 
     function setLocked(bool newFlag) external onlyOwner {
         locked = newFlag;
+    }
+
+    function setTradingAllowed(bool newFlag) external onlyOwner {
+        tradingAllowed = newFlag;
     }
 
     function name() public view override returns (string memory) {
@@ -121,6 +137,9 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
         // While locked, only allow transfer from merge contract and owner
         if (locked && from != merge && from != owner()) {
             revert TransferLocked();
+        }
+        if (!tradingAllowed && from != merge && to != merge && from != staking && to != staking && from != owner()) {
+            revert TradingNotAllowed();
         }
         super._beforeTokenTransfer(from, to, amount);
     }

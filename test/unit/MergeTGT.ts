@@ -9,7 +9,6 @@ let initialSupply = new BN("750000000000000000000000000");
 describe("Merge Contract", function () {
   async function deployFixture() {
     const [owner, otherAccount] = await ethers.getSigners();
-
     const TokenIOU = await ethers.getContractFactory("TokenIOU");
     const Tgt = await ethers.getContractFactory("TGT");
 
@@ -65,7 +64,7 @@ describe("Merge Contract", function () {
       await expect(tgt.transferAndCall(mergeTgt, 1000, "0x")).to.be.revertedWithCustomError(mergeTgt, "MergeLocked");
     });
 
-    it("Should not revert if amount is zero", async function () {
+    it("Should revert if amount is zero", async function () {
       const { owner, mergeTgt, tgt } = await loadFixture(deployFixture);
       await mergeTgt.setLockedStatus(1);
 
@@ -75,7 +74,7 @@ describe("Merge Contract", function () {
       await tgt.mintFinish();
       await tgt.approve(owner, 1000);
 
-      await tgt.transferAndCall(mergeTgt, 0, "0x");
+      await expect(tgt.transferAndCall(mergeTgt, 0, "0x")).to.be.revertedWithCustomError(mergeTgt, "ZeroAmount");
     });
 
     it("Should correctly transfer Tgt", async function () {
@@ -86,6 +85,8 @@ describe("Merge Contract", function () {
       let amount = new Array(initialSupply.toString());
       await tgt.mint(acc, amount);
       await tgt.mintFinish();
+
+      console.log("AAA");
 
       const vultAmount = 1_250_000n * ethers.parseEther("1");
       const TgtDeposit = 6_570_000n * ethers.parseEther("1");
@@ -102,12 +103,6 @@ describe("Merge Contract", function () {
       // Perform the transfer
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal("125000000000000000000000");
-
-      await mergeTgt.setClaimStatus(1);
-      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, 0, "0x"))
-      .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal(0);
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
       expect(await mergeTgt.vultBalance()).to.equal("1125000000000000000000000"); //1_125_000 x 1e18
@@ -146,12 +141,6 @@ describe("Merge Contract", function () {
       // Perform the transfer
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal("111111062885802469135802");
-
-      await mergeTgt.setClaimStatus(1);
-      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, 0, "0x"))
-      .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal(0);
 
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
@@ -191,10 +180,9 @@ describe("Merge Contract", function () {
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
 
-      await mergeTgt.setClaimStatus(1);
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
       .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount)).to.equal(0);
+     
 
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(BigInt(4) * TgtDeposit);
@@ -231,14 +219,6 @@ describe("Merge Contract", function () {
         .to.not.be.reverted;
       await expect(tgt.connect(otherAccount2).transferAndCall(mergeTgt, TgtDeposit2, "0x"))
         .to.not.be.reverted;
-
-      await mergeTgt.setClaimStatus(1);
-      await expect(tgt.connect(otherAccount1).transferAndCall(mergeTgt, 0, "0x"))
-      .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount1)).to.equal(0);
-      await expect(tgt.connect(otherAccount2).transferAndCall(mergeTgt, 0, "0x"))
-      .to.not.be.reverted;
-      expect(await mergeTgt.getClaimableVult(otherAccount2)).to.equal(0);
 
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit1 + TgtDeposit2);
       expect(await vult.balanceOf(mergeTgt)).to.equal("1000000000000000000000000"); 

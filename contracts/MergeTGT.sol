@@ -20,14 +20,12 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
     uint256 public constant VULT_IOU = 12_500_000 * 10**18; // 12.5% of MAX_VULT
     uint256 public immutable launchTime;
 
-    mapping(address => uint256) public claimableVult;
     mapping(address => uint256) public totalClaimedVultPerUser;
     uint256 public totalVultClaimed;
     uint256 public remainingVultAfter1Year;
 
 
     LockedStatus public lockedStatus;
-    uint256 public claimStatus;
 
     constructor(address _tgt, address _vult) {
         tgt = IERC20(_tgt);
@@ -47,25 +45,19 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         if (lockedStatus == LockedStatus.Locked) {
             revert MergeLocked();
         }
-        /*if (amount == 0) {
+        if (amount == 0) {
             revert ZeroAmount();
-        }*/ //removed this to enable claiming, is this ok?
+        }
 
         // tgt in, vult out
         uint256 vultOut = quoteVult(amount);
         vultBalance -= vultOut;
         //tgt already transferred
-        if (claimStatus == 0) {
-            claimableVult[from] += vultOut;
-        } 
-        if (claimStatus == 1) {
-            uint256 totalVultToTransfer = claimableVult[from] + vultOut;
-            vult.safeTransfer(from, totalVultToTransfer);
-            totalVultClaimed += totalVultToTransfer;
-            totalClaimedVultPerUser[from] += totalVultToTransfer;
-            claimableVult[from] = 0;
-            
-        }
+
+        vult.safeTransfer(from, vultOut);
+        totalVultClaimed += vultOut;
+        totalClaimedVultPerUser[from] += vultOut;        
+        
     }    
 
     function deposit(IERC20 token, uint256 amount) external onlyOwner {
@@ -77,7 +69,6 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         vultBalance += amount; //TODO : maybe make the initial transfer at contract initialisation? so there is no need to have a deposit function
 
         }
-    
 
 
     /// @notice Withdraw any locked contracts in Merge contract
@@ -89,7 +80,7 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         if (block.timestamp- launchTime < 360 days) {
             revert TooEarlyToClaimRemainingVult();
         }  
-        if (remainingVultAfter1Year == 0) {
+        if (remainingVultAfter1Year == 0) { // remainingVultAfter1Year is initialized to 0, so the first time someone will call this function, we will initialize the value
             remainingVultAfter1Year = vult.balanceOf(address(this));
         }
         vult.safeTransfer(msg.sender, (totalClaimedVultPerUser[msg.sender] * remainingVultAfter1Year) / totalVultClaimed);
@@ -97,18 +88,6 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
 
     function setLockedStatus(LockedStatus newStatus) external onlyOwner {
         lockedStatus = newStatus;
-    }
-
-    function setClaimStatus(uint256 newStatus) external onlyOwner {
-        claimStatus = newStatus;
-    }
-
-    function getClaimStatus() external view returns (uint256) {
-        return claimStatus;
-    }
-
-    function getClaimableVult(address user) external view returns (uint256) {
-        return claimableVult[user];
     }
 
     function gettotalClaimedVultPerUser(address user) external view returns (uint256) {
