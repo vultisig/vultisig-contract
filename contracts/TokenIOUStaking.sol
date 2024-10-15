@@ -7,7 +7,6 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 //import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
-import {IERC1363} from "./interfaces/IERC1363.sol";
 
 
 //import "hardhat/console.sol";
@@ -22,7 +21,7 @@ import {IERC1363} from "./interfaces/IERC1363.sol";
  * Every time `updateReward(token)` is called, We distribute the balance of that tokens as rewards to users that are
  * currently staking inside this contract, and they can claim it using `withdraw(0)`
  */
-contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
+contract TokenIOUStaking is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     /// @notice Info of each user
@@ -125,11 +124,14 @@ contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
 
 
     /**
-     * @notice Deposit tokenIOU for reward token allocation
-     * @param _amount The amount of tokenIOU to deposit
-     */
-    function deposit(uint256 _amount) external nonReentrant {
-        UserInfo storage user = userInfo[_msgSender()];
+        * @notice on approval received ERC1363-like
+        * @param _from The address that is approving
+        * @param _amount The amount of tokenIOU to deposit
+        * @param data The data of the approval
+        * @return bytes4 The selector of the function
+    */
+    function onApprovalReceived(address _from, uint256 _amount, bytes calldata data) external nonReentrant returns (bytes4){
+        UserInfo storage user = userInfo[_from];
 
         uint256 _previousAmount = user.amount;
 
@@ -137,8 +139,7 @@ contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
             user.depositTimestamp = block.timestamp;
         }
 
-        uint256 _newAmount = user.amount + _amount;
-        user.amount = _newAmount;
+        user.amount += _amount;
 
         uint256 _len = rewardTokens.length;
         for (uint256 i; i < _len; i++) {
@@ -147,14 +148,14 @@ contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
             _updateReward(_token);
 
             uint256 _previousRewardDebt = user.rewardDebt[_token];
-            user.rewardDebt[_token] = _newAmount * accRewardPerShare[_token] / ACC_REWARD_PER_SHARE_PRECISION;
+            user.rewardDebt[_token] = user.amount * accRewardPerShare[_token] / ACC_REWARD_PER_SHARE_PRECISION;
 
             if (_previousAmount != 0 || user.rewardPayoutAmount[_token] != 0) {
 
                 uint256 _pending = ((_previousAmount * accRewardPerShare[_token]) / ACC_REWARD_PER_SHARE_PRECISION) - _previousRewardDebt;
 
                 if (_pending != 0) {
-                    uint256 _stakingMultiplier = getStakingMultiplier(_msgSender());
+                    uint256 _stakingMultiplier = getStakingMultiplier(_from);
                     uint256 _fullReward = _pending;
 
                     if (_stakingMultiplier < 1e18 && _stakingMultiplier >= 5e17) {
@@ -181,8 +182,8 @@ contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
                     }
                     if (_pending > 0) {
                         user.paidRewards[_token] += _pending;
-                        safeTokenTransfer(_token, _msgSender(), _pending);
-                        emit ClaimReward(_msgSender(), address(_token), _pending);
+                        safeTokenTransfer(_token, _from, _pending);
+                        emit ClaimReward(_from, address(_token), _pending);
                     }
                     user.lastRewardStakingMultiplier = _stakingMultiplier;
                     user.rewardPayoutAmount[_token] += _fullReward - ((_fullReward * _stakingMultiplier) / MULTIPLIER_PRECISION);
@@ -191,8 +192,10 @@ contract TokenIOUStaking is Ownable, ReentrancyGuard/*, IERC1363 */ {
         }
 
         internalTokenIOUBalance = internalTokenIOUBalance + _amount;
-        tokenIOU.safeTransferFrom(_msgSender(), address(this), _amount);
-        emit Deposit(_msgSender(), _amount);
+        tokenIOU.safeTransferFrom(_from, address(this), _amount);
+        emit Deposit(_from, _amount);
+
+        return this.onApprovalReceived.selector;
     }
 
     /**

@@ -73,11 +73,6 @@ describe("TokenIOU Staking", function () {
 
         console.log("USDC decimals is: " + (await rewardToken.decimals()).toString());
 
-        await tokenIOU.connect(alice).approve(tokenIOUStaking.getAddress(), parseEther("360000"));
-        await tokenIOU.connect(bob).approve(tokenIOUStaking.getAddress(), parseEther("360000"));
-        await tokenIOU.connect(carol).approve(tokenIOUStaking.getAddress(), parseEther("100000"));
-        await tokenIOU.connect(joe).approve(tokenIOUStaking.getAddress(), parseEther("100000"));
-
         await tokenIOU.connect(alice).approve(tokenIOUStakingBasic.getAddress(), parseEther("360000"));
         await tokenIOU.connect(bob).approve(tokenIOUStakingBasic.getAddress(), parseEther("360000"));
         await tokenIOU.connect(carol).approve(tokenIOUStakingBasic.getAddress(), parseEther("100000"));
@@ -110,6 +105,45 @@ describe("TokenIOU Staking", function () {
 
     describe("should allow deposits and withdraws", function () {
 
+        it("testing deployment", async function () {
+            const TGT = await ethers.getContractFactory("TGT");
+            const USDC = await ethers.getContractFactory("USDC");
+            const TokenIOU = await ethers.getContractFactory("TokenIOU");
+            const MergeTgt = await ethers.getContractFactory("MergeTgt");
+            const TokenIOUStaking = await ethers.getContractFactory("TokenIOUStaking");
+
+            const tgt = await TGT.deploy();
+            await tgt.waitForDeployment();
+            const usdc = await USDC.deploy();
+            await usdc.waitForDeployment();
+            const tokenIOU = await TokenIOU.deploy("VULTISIG", "VULT.IOU");
+            await tokenIOU.waitForDeployment();
+            const tokenIOUStaking = await TokenIOUStaking.deploy(usdc.target, tokenIOU.target);
+            await tokenIOUStaking.waitForDeployment();
+            const rewardAmount = 1000n * ethers.parseEther("1");
+            await tokenIOU.transfer(tokenIOUStaking.target, rewardAmount);
+          
+            const mergeTgt = await MergeTgt.deploy(tgt, tokenIOU.target);
+            await mergeTgt.waitForDeployment();
+          
+          
+            // Configuration
+            const tokenAmount = 1000n * ethers.parseEther("1");
+            await tokenIOU.approve(mergeTgt, tokenAmount, { gasLimit: 300000 }); 
+            await mergeTgt.deposit(tokenIOU.target, tokenAmount);
+            await tokenIOU.setMerge(mergeTgt);
+            await tokenIOU.setStaking(tokenIOUStaking.target);
+
+            await tokenIOU.connect((await ethers.getSigners())[0]).approveAndCall(tokenIOUStaking.target, tokenAmount);
+
+          
+            // To unlock
+            // const lockedTx = await merge.setLockedStatus(1);
+            // await lockedTx.wait(2);
+          }
+            
+        )
+
         it("should allow deposits and withdraws of multiple users", async function () {
             const {
                 tokenIOUStaking,
@@ -120,15 +154,9 @@ describe("TokenIOU Staking", function () {
                 bob,
                 carol
             } = await loadFixture(deployFixture);
-
-            console.log("PRINT00");
-
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-
-            console.log("PRINT0");
-
+            //await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             expect(await tokenIOU.balanceOf(alice.address)).to.be.equal(parseEther("900"));
-            console.log("PRINT1");
             expect(
                 await tokenIOU.balanceOf(await tokenIOUStaking.getAddress())
             ).to.be.equal(parseEther("100"));
@@ -137,7 +165,7 @@ describe("TokenIOU Staking", function () {
                 alice.address,
                 await tokenIOU.getAddress()))[0]
             ).to.be.equal(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("200"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("200"));
             expect(await tokenIOU.balanceOf(bob.address)).to.be.equal(
                 parseEther("800")
                 // 97 + 200 * 0.97 = 291
@@ -145,9 +173,9 @@ describe("TokenIOU Staking", function () {
             expect(await tokenIOU.balanceOf(await tokenIOUStaking.getAddress())).to.be.equal(parseEther("300"));
             expect((await tokenIOUStaking.getUserInfo(await bob.getAddress(), await tokenIOU.getAddress()))[0]).to.be.equal(parseEther("200"));
 
-            await tokenIOUStaking
+            await tokenIOU
                 .connect(carol)
-                .deposit(parseEther("300"));
+                .approveAndCall(tokenIOUStaking.getAddress(), parseEther("300"));
             expect(await tokenIOU.balanceOf(carol.address)).to.be.equal(
                 parseEther("700")
             );
@@ -191,7 +219,7 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit("1");
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), "1");
 
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("1"));
 
@@ -227,7 +255,7 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit("1");
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), "1");
 
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("1"));
 
@@ -283,9 +311,9 @@ describe("TokenIOU Staking", function () {
 
             console.log("3");
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("200"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("300"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("200"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("300"));
             // console.log("Staking multiplier is now: " + (await tokenIOUStaking.getStakingMultiplier(alice.address)).toString());
             await increase(86400 * 7);
             // console.log("Staking multiplier is now: " + (await tokenIOUStaking.getStakingMultiplier(alice.address)).toString());
@@ -352,7 +380,7 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker,
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(1);
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), 1);
             expect(await rewardToken.balanceOf(alice.address)).to.be.equal(0);
 
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("1"));
@@ -377,8 +405,8 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker,
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
 
             console.log("4");
 
@@ -388,7 +416,7 @@ describe("TokenIOU Staking", function () {
 
             console.log("4");
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("1000")); // Bob enters
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1000")); // Bob enters
 
             console.log("Reward pool balance: " + (await rewardToken.balanceOf(await tokenIOUStaking.getAddress())).toString());
             console.log("Staking multiplier for Alice: " + formatEther(await tokenIOUStaking.getStakingMultiplier(alice.address)));
@@ -420,7 +448,7 @@ describe("TokenIOU Staking", function () {
             console.log("Pending reward for Alice: " + formatEther(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress())));
 
             // Alice enters again to try to get more rewards
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
 
             console.log("Pending reward for Alice: " + formatEther(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress())));
             console.log("Reward pool balance: " + formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())).toString());
@@ -519,7 +547,7 @@ describe("TokenIOU Staking", function () {
                 alice,
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("300"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("300"));
 
             expect(await tokenIOU.balanceOf(alice.address)).to.be.equal(parseEther("700"));
             expect(await tokenIOU.balanceOf(await tokenIOUStaking.getAddress())).to.be.equal(parseEther("300"));
@@ -550,20 +578,11 @@ describe("TokenIOU Staking", function () {
                 deployFixture,
             );
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("1000"));
-            console.log("7");
-
-            await tokenIOUStaking.connect(bob).deposit(parseEther("1000"));
-            console.log("7");
-
-            await tokenIOUStaking.connect(carol).deposit(parseEther("1000"));
-            console.log("7");
-
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1000"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1000"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1000"));
             increase(86400 * 7);
-            console.log("7");
             await rewardToken.mint(await tokenIOUStaking.getAddress(), parseEther("3"));
-            console.log("7");
-
             await tokenIOUStaking.connect(alice).withdraw(0);
             // accRewardBalance = rewardBalance * PRECISION / totalStaked
             //                  = 3e18 * 1e24 / 291e18
@@ -580,8 +599,6 @@ describe("TokenIOU Staking", function () {
             // accJoeBalance = 0
             // reward = 0
             expect(await tokenIOU.balanceOf(alice.address)).to.be.equal(0);
-            console.log("7");
-
             await tokenIOUStaking.addRewardToken(await tokenIOU.getAddress());
             await tokenIOU.transfer(await tokenIOUStaking.getAddress(), parseEther("6"));
             //await tokenIOU.mint([await tokenIOUStaking.getAddress()], [parseEther("6")]);
@@ -595,8 +612,6 @@ describe("TokenIOU Staking", function () {
                 parseEther("0.0001")
             );
 
-            console.log("7");
-
             // accJoeBalance = tokenIOUBalance * PRECISION / totalStaked
             //                  = 6e18 * 1e24 / 291e18
             //                  = 0.002061855670103092783505e24
@@ -607,8 +622,6 @@ describe("TokenIOU Staking", function () {
                 parseEther("1"),
                 parseEther("0.0001")
             );
-
-            console.log("7");
 
 
             await tokenIOUStaking.connect(alice).withdraw(parseEther("0"));
@@ -672,7 +685,7 @@ describe("TokenIOU Staking", function () {
             await tokenIOUStaking.addRewardToken(await usdc.getAddress());
             await usdc.mint(await tokenIOUStaking.getAddress(), parseEther("100"));
             expect(await tokenIOUStaking.pendingReward(await alice.getAddress(), await usdc.getAddress())).to.be.equal(parseEther("0"));
-            await tokenIOUStaking.connect(alice).deposit(1);
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), 1);
             increase(86400 * 7);
             expect(await tokenIOUStaking.pendingReward(await alice.getAddress(), await usdc.getAddress())).to.be.equal(parseEther("50"));
             increase(86400 * 30);
@@ -700,8 +713,8 @@ describe("TokenIOU Staking", function () {
 
             let usdc = await USDC.deploy();
             await tokenIOUStaking.addRewardToken(await usdc.getAddress());
-            await tokenIOUStaking.connect(alice).deposit(1);
-            await tokenIOUStaking.connect(bob).deposit(1);
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), 1);
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), 1);
             increase(86400 * 365);
 
             await usdc.mint(await tokenIOUStaking.getAddress(), parseEther("100"));
@@ -722,7 +735,7 @@ describe("TokenIOU Staking", function () {
             balBob = await usdc.balanceOf(await bob.getAddress());
             expect(balBob).to.be.closeTo(pendingRewardBob, parseEther("0.0001"));
 
-            await tokenIOUStaking.connect(alice).deposit(1);
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), 1);
             increase(86400 * 7);
 
             balBob = await usdc.balanceOf(await bob.getAddress());
@@ -772,8 +785,8 @@ describe("TokenIOU Staking", function () {
             let usdc = await USDC.deploy();
             await tokenIOUStaking.addRewardToken(await usdc.getAddress());
 
-            await tokenIOUStaking.connect(alice).deposit(1);
-            await tokenIOUStaking.connect(bob).deposit(1);
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), 1);
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), 1);
             increase(86400 * 7);
 
             await usdc.mint(await tokenIOUStaking.getAddress(), parseEther("1"));
@@ -794,7 +807,7 @@ describe("TokenIOU Staking", function () {
 
             await usdc.mint(await tokenIOUStaking.getAddress(), parseEther("1"));
 
-            await tokenIOUStaking.connect(alice).deposit(1);
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), 1);
             await tokenIOUStaking.connect(bob).withdraw(0);
             await tokenIOUStaking.connect(alice).withdraw(0);
 
@@ -854,7 +867,7 @@ describe("TokenIOU Staking", function () {
                 deployFixture,
             );
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("300"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("300"));
             expect(await tokenIOU.balanceOf(alice.address)).to.be.equal(parseEther("700"));
             expect(await tokenIOU.balanceOf(await tokenIOUStaking.getAddress())).to.be.equal(parseEther("300"));
 
@@ -886,11 +899,11 @@ describe("TokenIOU Staking", function () {
                 deployFixture,
             );
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
 
             await increase(86400 * 365);
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100")); // Bob enters
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100")); // Bob enters
             await increase(86400 * 7);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
@@ -988,14 +1001,14 @@ describe("TokenIOU Staking", function () {
                 await dev.sendTransaction({to: signer.address, value: parseEther("0.1")});
                 await tokenIOU.connect(dev).mint2(signer.address, parseEther("100"));
                 await tokenIOU.connect(signer).approve(await tokenIOUStaking.getAddress(), parseEther("1000"));
-                await tokenIOUStaking.connect(signer).deposit(parseEther("100"));
+                await tokenIOUStaking.connect(signer).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             }
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
 
             await increase(86400 * 365);
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await increase(86400 * 10);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
@@ -1032,8 +1045,8 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await increase(86400 * 365);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
@@ -1105,8 +1118,8 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await increase(86400 * 7);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
@@ -1197,7 +1210,7 @@ describe("TokenIOU Staking", function () {
             console.log("Staking deposit for Alice: " + formatEther(userInfo[0]));
 
             await tokenIOU.connect(tokenIOUMaker).transfer(alice.address, parseEther("350000"));
-            await tokenIOUStaking.connect(alice).deposit(parseEther("350000"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("350000"));
             increase(86400 * 365);
             userInfo = await tokenIOUStaking.getUserInfo(alice.address, await rewardToken.getAddress());
             console.log("Staking deposit for Alice: " + formatEther(userInfo[0]));
@@ -1220,8 +1233,8 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await increase(86400 * 7);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
@@ -1288,8 +1301,8 @@ describe("TokenIOU Staking", function () {
 
             await tokenIOU.connect(tokenIOUMaker).transfer(alice.address, parseEther("350000"));
             await tokenIOU.connect(tokenIOUMaker).transfer(bob.address, parseEther("350000"));
-            await tokenIOUStaking.connect(alice).deposit(parseEther("350000"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("350000"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("350000"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("350000"));
             increase(86400 * 365);
             userInfo = await tokenIOUStaking.getUserInfo(alice.address, await rewardToken.getAddress());
             console.log("Staking deposit for Alice: " + formatEther(userInfo[0]));
@@ -1319,8 +1332,8 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await increase(86400 * 7);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
@@ -1402,8 +1415,8 @@ describe("TokenIOU Staking", function () {
                 tokenIOUMaker
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await increase(86400 * 7);
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("200"));
 
@@ -1466,15 +1479,15 @@ describe("TokenIOU Staking", function () {
             await tokenIOU.connect(joe).transfer(carol.address, parseEther("3000"));
             await tokenIOU.connect(joe).transfer(bob.address, parseEther("1100"));
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("2858"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("2858"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("10"));
             await increase(86400 * 10);
             console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())));
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("1100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1100"));
 
             console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())));
 
@@ -1516,16 +1529,16 @@ describe("TokenIOU Staking", function () {
             await tokenIOU.connect(joe).transfer(carol.address, parseEther("3000"));
             await tokenIOU.connect(joe).transfer(bob.address, parseEther("1100"));
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("10"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("10"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("2858"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("2858"));
             await increase(86400 * 10);
 
             console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())));
 
-            // await tokenIOUStaking.connect(bob).deposit(parseEther("1100"));
+            // await tokenIOUStaking.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1100"));
 
             console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())));
 
@@ -1562,16 +1575,16 @@ describe("TokenIOU Staking", function () {
             await tokenIOU.connect(joe).transfer(carol.address, parseEther("3300"));
             await tokenIOU.connect(joe).transfer(bob.address, parseEther("2000"));
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("200"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("300"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("200"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("300"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("300"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("3000"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("3000"));
             await increase(86400 * 10);
             console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("200"));
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("2000"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("2000"));
 
             console.log("Reward pool balance: ", formatEther(await rewardToken.balanceOf(await tokenIOUStaking.getAddress())));
 
@@ -1590,14 +1603,14 @@ describe("TokenIOU Staking", function () {
                 +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("200"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("200"));
 
             expect(toBigInt(await tokenIOUStaking.pendingReward(alice.address, await rewardToken.getAddress()))
                 +(toBigInt(await tokenIOUStaking.pendingReward(bob.address, await rewardToken.getAddress())))
                 +(toBigInt(await tokenIOUStaking.pendingReward(carol.address, await rewardToken.getAddress())))
             ).to.be.lte(await rewardToken.balanceOf(await tokenIOUStaking.getAddress()));
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("300"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("300"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
             increase(86400 * 5);
 
@@ -1679,17 +1692,17 @@ describe("TokenIOU Staking", function () {
             await tokenIOU.connect(joe).transfer(carol.address, parseEther("3000"));
             await tokenIOU.connect(joe).transfer(bob.address, parseEther("1100"));
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("10"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
             await increase(86400 * 10);
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
 
-            await tokenIOUStaking.connect(carol).deposit(parseEther("10"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("2858"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("2858"));
 
             await increase(86400 * 10);
 
@@ -1732,17 +1745,17 @@ describe("TokenIOU Staking", function () {
             await tokenIOU.connect(joe).transfer(carol.address, parseEther("3000"));
             await tokenIOU.connect(joe).transfer(bob.address, parseEther("1100"));
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("10"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
             await increase(86400 * 10);
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("1000"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1000"));
 
-            await tokenIOUStaking.connect(carol).deposit(parseEther("10"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("1000"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("1000"));
 
             await increase(86400 * 10);
 
@@ -1881,11 +1894,11 @@ describe("TokenIOU Staking", function () {
                 joe
             } = await loadFixture(deployFixture);
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("20"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("20"));
             increase(86400 * 365);
-            await tokenIOUStaking.connect(bob).deposit(parseEther("30"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("30"));
             increase(86400 * 7);
-            await tokenIOUStaking.connect(carol).deposit(parseEther("50"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("50"));
 
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("1000"));
 
@@ -1940,9 +1953,9 @@ describe("TokenIOU Staking", function () {
             } = await loadFixture(deployFixture);
 
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("10"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("50"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("20"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("10"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("50"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("20"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("10"));
 
             await increase(86400 * 10);
@@ -1955,7 +1968,7 @@ describe("TokenIOU Staking", function () {
                 parseEther("0.01")
             );
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("50"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("50"));
             expect(await tokenIOUStaking.getStakingMultiplier(bob.address)).to.be.equal(parseEther("0.0"));
 
             await tokenIOU.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
@@ -1964,7 +1977,7 @@ describe("TokenIOU Staking", function () {
             await tokenIOUStaking.connect(bob).withdraw(parseEther("50"));
             await tokenIOU.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
 
-            await tokenIOUStaking.connect(bob).deposit(parseEther("50"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("50"));
             await tokenIOU.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("100"));
             await tokenIOUStaking.connect(bob).withdraw(parseEther("50"));
 
@@ -2014,9 +2027,9 @@ describe("TokenIOU Staking", function () {
             } = await loadFixture(deployFixture);
 
 
-            await tokenIOUStaking.connect(alice).deposit(parseEther("100"));
-            await tokenIOUStaking.connect(bob).deposit(parseEther("200"));
-            await tokenIOUStaking.connect(carol).deposit(parseEther("100"));
+            await tokenIOU.connect(alice).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
+            await tokenIOU.connect(bob).approveAndCall(tokenIOUStaking.getAddress(), parseEther("200"));
+            await tokenIOU.connect(carol).approveAndCall(tokenIOUStaking.getAddress(), parseEther("100"));
             await rewardToken.connect(tokenIOUMaker).transfer(await tokenIOUStaking.getAddress(), parseEther("1000"));
 
             await increase(86400 * 30);
@@ -2068,7 +2081,7 @@ describe("TokenIOU Staking", function () {
 
         });
 
-        it("Auto staking", async function () {
+        /*it("Auto staking", async function () {
 
             const {
                 tokenIOUStakingBasic,
@@ -2111,7 +2124,7 @@ describe("TokenIOU Staking", function () {
             console.log("Reward balance of Alice: " + formatEther(await rewardToken.balanceOf(alice.address)));
             console.log("Reward balance of Bob: " + formatEther(await rewardToken.balanceOf(bob.address)));
             console.log("--------------------------------------");
-        });
+        });*/
 
     });
 

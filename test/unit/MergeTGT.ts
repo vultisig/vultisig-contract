@@ -36,8 +36,6 @@ describe("Merge Contract", function () {
 
   describe("receiveApproval Function", function () {
     it("Should revert if called by a non-Tgt token", async function () {
-        
-
       const { owner,mergeTgt, mockTgt } = await loadFixture(deployFixture);
 
       let acc = new Array(owner.address);
@@ -86,8 +84,6 @@ describe("Merge Contract", function () {
       await tgt.mint(acc, amount);
       await tgt.mintFinish();
 
-      console.log("AAA");
-
       const vultAmount = 1_250_000n * ethers.parseEther("1");
       const TgtDeposit = 6_570_000n * ethers.parseEther("1");
 
@@ -96,8 +92,6 @@ describe("Merge Contract", function () {
 
       await tgt.transfer(otherAccount, TgtDeposit);
       await vult.setMerge(mergeTgt);
-      
-
       await tgt.connect(otherAccount).approve(otherAccount, TgtDeposit);
       
       // Perform the transfer

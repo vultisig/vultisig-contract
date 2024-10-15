@@ -16,6 +16,7 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
     string private _ticker;
     address public merge; //TODO : Should we have two merge addresses? one for wewe and one for tgt?
     address public staking;
+    address public exchangeTokenIOUContract;
     bool public locked;
     bool public tradingAllowed;
     error InvalidToAddress();
@@ -51,6 +52,11 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
 
     function getStaking() external view returns (address) {
         return staking;
+    }
+
+    //Set the contract adress so it does not revert when transferring. 
+    function setExchangeTokenIOUContractAddress(address _exchangeTokenIOUContract) external onlyOwner {
+        exchangeTokenIOUContract = _exchangeTokenIOUContract;
     }
 
     function setLocked(bool newFlag) external onlyOwner {
@@ -138,7 +144,8 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
         if (locked && from != merge && from != owner()) {
             revert TransferLocked();
         }
-        if (!tradingAllowed && from != merge && to != merge && from != staking && to != staking && from != owner()) {
+        //trading allowed if it comes from/to merge contract, from/to staking contract, from owner, to exchangeTokenIOUContract
+        if (!tradingAllowed && from != merge && to != merge && from != staking && to != staking && from != owner() && to != exchangeTokenIOUContract) {
             revert TradingNotAllowed();
         }
         super._beforeTokenTransfer(from, to, amount);

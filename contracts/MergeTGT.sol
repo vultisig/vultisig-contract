@@ -15,6 +15,7 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
     IERC20 public immutable vult;
 
     uint256 public vultBalance;
+    uint256 public tgtBalance;
 
     uint256 public constant TGT_TO_EXCHANGE = 657_000_000 * 10**18; // 65.7% of MAX_TGT
     uint256 public constant VULT_IOU = 12_500_000 * 10**18; // 12.5% of MAX_VULT
@@ -33,7 +34,7 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         launchTime = block.timestamp;
     }
 
-    /// @notice tgt token approveAndCall
+    /// @notice tgt token transferAndCall ERC677-like
     function onTokenTransfer(
         address from,
         uint256 amount,
@@ -48,16 +49,22 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         if (amount == 0) {
             revert ZeroAmount();
         }
-
         // tgt in, vult out
+
+        tgtBalance += amount;
+        //tgt already transferred
+        require(tgt.balanceOf(address(this)) == tgtBalance, "Incorrect Tgt amount transferred");
+        
+
+        
         uint256 vultOut = quoteVult(amount);
         vultBalance -= vultOut;
-        //tgt already transferred
+        
+
 
         vult.safeTransfer(from, vultOut);
         totalVultClaimed += vultOut;
-        totalClaimedVultPerUser[from] += vultOut;        
-        
+        totalClaimedVultPerUser[from] += vultOut;       
     }    
 
     function deposit(IERC20 token, uint256 amount) external onlyOwner {
@@ -66,7 +73,7 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         }
 
         token.safeTransferFrom(msg.sender, address(this), amount); //TODO : should we enforce that the deposited amount is 12_500_000 * 10**18 ?
-        vultBalance += amount; //TODO : maybe make the initial transfer at contract initialisation? so there is no need to have a deposit function
+        vultBalance += amount; 
 
         }
 

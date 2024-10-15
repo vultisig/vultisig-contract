@@ -133,7 +133,7 @@ contract TGT is IERC20Metadata, IERC20Permit, IERC677ish, EIP712 {
         require(recipient != address(0), "ERC20: transfer to the zero address");
         require(recipient != address(this), "ERC20: transfer to this contract");
 
-        _transfer(sender, recipient, amount); //TODO : should we first check allowance?
+        _transfer(sender, recipient, amount);
 
         uint256 currentAllowance = _allowances[sender][msg.sender];
         require(currentAllowance >= amount, "ERC20: transfer amount exceeds allowance");
