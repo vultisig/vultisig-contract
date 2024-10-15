@@ -25,7 +25,7 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
 
     constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) {
         tradingAllowed = true; //we allow trading only to mint, then we set it to false
-        _mint(_msgSender(), 10_000_000 * 1e18);
+        _mint(_msgSender(), 100_000_000 * 1e18);
         tradingAllowed = false;
         _name = name_;
         _ticker = ticker_;
