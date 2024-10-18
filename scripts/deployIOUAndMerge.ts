@@ -14,10 +14,10 @@ async function main() {
   console.log("Merge:", await merge.getAddress());
 
   // Configuration
-  const weweAmount = 10000000000n * ethers.parseEther("1");
+  const tgtAmount = 10000000000n * ethers.parseEther("1");
   const tokenAmount = 10000000n * ethers.parseEther("1");
 
-  const virtualT = await merge.setVirtualWeweBalance(weweAmount);
+  const virtualT = await merge.setVirtualWeweBalance(tgtAmount);
   await virtualT.wait(2);
 
   const approveTx = await tokenIOU.approve(merge, tokenAmount);
