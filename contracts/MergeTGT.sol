@@ -19,10 +19,12 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
 
     uint256 public constant TGT_TO_EXCHANGE = 657_000_000 * 10**18; // 65.7% of MAX_TGT
     uint256 public constant VULT_IOU = 12_500_000 * 10**18; // 12.5% of MAX_VULT
-    uint256 public immutable launchTime;
+    uint256 public launchTime;
 
-    mapping(address => uint256) public totalClaimedVultPerUser;
+    mapping(address => uint256) public claimedVultPerUser;
+    mapping(address => uint256) public claimableVultPerUser;
     uint256 public totalVultClaimed;
+    uint256 public totalVultClaimable;
     uint256 public remainingVultAfter1Year;
 
 
@@ -31,7 +33,22 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
     constructor(address _tgt, address _vult) {
         tgt = IERC20(_tgt);
         vult = IERC20(_vult);
-        launchTime = block.timestamp;
+    }
+
+    function deposit(IERC20 token, uint256 amount) external onlyOwner {
+        if (token != vult) {
+            revert InvalidTokenReceived();
+        }
+
+        token.safeTransferFrom(msg.sender, address(this), amount); //TODO : should we enforce that the deposited amount is 12_500_000 * 10**18 ?
+        vultBalance += amount; 
+
+        }
+
+
+    /// @notice Withdraw any locked contracts in Merge contract
+    function withdraw(IERC20 token, uint256 amount) external onlyOwner {
+        token.safeTransfer(owner(), amount);
     }
 
     /// @notice tgt token transferAndCall ERC677-like
@@ -58,29 +75,23 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
 
         
         uint256 vultOut = quoteVult(amount);
-        vultBalance -= vultOut;
-        
-
-
-        vult.safeTransfer(from, vultOut);
-        totalVultClaimed += vultOut;
-        totalClaimedVultPerUser[from] += vultOut;       
+        claimableVultPerUser[from] += vultOut;   
+        totalVultClaimable += vultOut;
     }    
 
-    function deposit(IERC20 token, uint256 amount) external onlyOwner {
-        if (token != vult) {
-            revert InvalidTokenReceived();
-        }
+    function claimVult(uint256 amount) external nonReentrant {
+        require(amount <= claimableVultPerUser[msg.sender], "Not enough claimable vult");
 
-        token.safeTransferFrom(msg.sender, address(this), amount); //TODO : should we enforce that the deposited amount is 12_500_000 * 10**18 ?
-        vultBalance += amount; 
+        claimedVultPerUser[msg.sender] += amount;
+        claimableVultPerUser[msg.sender] -= amount;
 
-        }
+        totalVultClaimed += amount;
+        totalVultClaimable -= amount;
 
-
-    /// @notice Withdraw any locked contracts in Merge contract
-    function withdraw(IERC20 token, uint256 amount) external onlyOwner {
-        token.safeTransfer(owner(), amount);
+        vultBalance -= amount;
+        
+        vult.safeTransfer(msg.sender, amount);
+    
     }
 
     function withdrawRemainingVult() external nonReentrant() {
@@ -90,16 +101,11 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         if (remainingVultAfter1Year == 0) { // remainingVultAfter1Year is initialized to 0, so the first time someone will call this function, we will initialize the value
             remainingVultAfter1Year = vult.balanceOf(address(this));
         }
-        vult.safeTransfer(msg.sender, (totalClaimedVultPerUser[msg.sender] * remainingVultAfter1Year) / totalVultClaimed);
+        uint256 claimableVult = claimableVultPerUser[msg.sender];
+        claimableVultPerUser[msg.sender] = 0;
+        vult.safeTransfer(msg.sender, (claimableVult * remainingVultAfter1Year) / totalVultClaimable);
     }
-
-    function setLockedStatus(LockedStatus newStatus) external onlyOwner {
-        lockedStatus = newStatus;
-    }
-
-    function gettotalClaimedVultPerUser(address user) external view returns (uint256) {
-        return totalClaimedVultPerUser[user];
-    }
+    
 
     function quoteVult(uint256 t) public view returns (uint256 v) {
         uint256 timeSinceLaunch = (block.timestamp - launchTime); 
@@ -113,4 +119,19 @@ contract MergeTgt is IMerge, IERC677Receiver, Ownable, ReentrancyGuard {
         }
     }
 
+    function setLockedStatus(LockedStatus newStatus) external onlyOwner {
+        lockedStatus = newStatus;
+    }
+
+    function setLaunchTime() external onlyOwner {
+        launchTime = block.timestamp;
+    }
+
+    function gettotalClaimedVultPerUser(address user) external view returns (uint256) {
+        return claimedVultPerUser[user];
+    }
+
+    function getClaimableVultPerUser(address user) external view returns (uint256) {
+        return claimableVultPerUser[user];
+    }
 }

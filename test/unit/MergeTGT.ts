@@ -65,6 +65,7 @@ describe("Merge Contract", function () {
     it("Should revert if amount is zero", async function () {
       const { owner, mergeTgt, tgt } = await loadFixture(deployFixture);
       await mergeTgt.setLockedStatus(1);
+      await mergeTgt.setLaunchTime();
 
       let acc = new Array(owner.address);
       let amount = new Array(initialSupply.toString());
@@ -78,6 +79,8 @@ describe("Merge Contract", function () {
     it("Should correctly transfer Tgt", async function () {
       const { owner, mergeTgt, otherAccount, tgt, vult } = await loadFixture(deployFixture);
       await mergeTgt.setLockedStatus(1);
+      await mergeTgt.setLaunchTime();
+
 
       let acc = new Array(owner.address);
       let amount = new Array(initialSupply.toString());
@@ -97,6 +100,10 @@ describe("Merge Contract", function () {
       // Perform the transfer
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
+
+      //perform claim
+      await mergeTgt.connect(otherAccount).claimVult("125000000000000000000000");
+
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
       expect(await mergeTgt.vultBalance()).to.equal("1125000000000000000000000"); //1_125_000 x 1e18
@@ -104,9 +111,48 @@ describe("Merge Contract", function () {
 
     });
 
+    it("Should revert if claiming too much vult", async function () {
+      const { owner, mergeTgt, otherAccount, tgt, vult } = await loadFixture(deployFixture);
+      await mergeTgt.setLockedStatus(1);
+      await mergeTgt.setLaunchTime();
+
+
+      let acc = new Array(owner.address);
+      let amount = new Array(initialSupply.toString());
+      await tgt.mint(acc, amount);
+      await tgt.mintFinish();
+
+      const vultAmount = 1_250_000n * ethers.parseEther("1");
+      const TgtDeposit = 6_570_000n * ethers.parseEther("1");
+
+      await vult.approve(mergeTgt, vultAmount);
+      await mergeTgt.deposit(vult, vultAmount);
+
+      await tgt.transfer(otherAccount, TgtDeposit);
+      await vult.setMerge(mergeTgt);
+      await tgt.connect(otherAccount).approve(otherAccount, TgtDeposit);
+      
+      // Perform the transfer
+      await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
+        .to.not.be.reverted;
+
+      //perform claim
+      await expect(mergeTgt.connect(otherAccount).claimVult("125000000000000000000001")).to.be.revertedWith(
+        "Not enough claimable vult",
+      );
+
+      // Assertions
+      expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
+      expect(await mergeTgt.vultBalance()).to.equal("1250000000000000000000000"); //1_125_000 x 1e18
+      expect(await vult.balanceOf(otherAccount)).to.equal("0");//125_000 x 1e18
+
+    });
+
     it("Should correctly transfer Tgt after 4 months", async function () {
       const { owner, mergeTgt, otherAccount, tgt, vult } = await loadFixture(deployFixture);
       await mergeTgt.setLockedStatus(1);
+      await mergeTgt.setLaunchTime();
+
 
       let acc = new Array(owner.address);
       let amount = new Array(initialSupply.toString());
@@ -136,15 +182,20 @@ describe("Merge Contract", function () {
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
         .to.not.be.reverted;
 
+      //perform claim
+      await mergeTgt.connect(otherAccount).claimVult("111111062885802469135802");
+
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit);
       expect(await vult.balanceOf(mergeTgt)).to.equal("1138888937114197530864198"); //1_138_888_937_114_197_530_864_198
       expect(await vult.balanceOf(otherAccount)).to.equal("111111062885802469135802");
     });
 
-    it("Should correctly transfer Tgt before claimableStatus is set to 1", async function () {
+    it("Should correctly transfer Tgt After claimableStatus is set to 1", async function () {
       const { owner, mergeTgt, otherAccount, tgt, vult } = await loadFixture(deployFixture);
       await mergeTgt.setLockedStatus(1);
+      await mergeTgt.setLaunchTime();
+
 
       let acc = new Array(owner.address);
       let amount = new Array(initialSupply.toString());
@@ -176,7 +227,9 @@ describe("Merge Contract", function () {
 
       await expect(tgt.connect(otherAccount).transferAndCall(mergeTgt, TgtDeposit, "0x"))
       .to.not.be.reverted;
-     
+
+      //perform claim
+      await mergeTgt.connect(otherAccount).claimVult("500000000000000000000000");
 
       // Assertions
       expect(await tgt.balanceOf(mergeTgt)).to.equal(BigInt(4) * TgtDeposit);
@@ -188,6 +241,8 @@ describe("Merge Contract", function () {
       const {mergeTgt, tgt, vult } = await loadFixture(deployFixture);
       const [owner, otherAccount1, otherAccount2] = await ethers.getSigners();
       await mergeTgt.setLockedStatus(1);
+      await mergeTgt.setLaunchTime();
+
 
       let acc = new Array(owner.address);
       let amount = new Array(initialSupply.toString());
@@ -214,10 +269,9 @@ describe("Merge Contract", function () {
       await expect(tgt.connect(otherAccount2).transferAndCall(mergeTgt, TgtDeposit2, "0x"))
         .to.not.be.reverted;
 
+      //not claiming
+
       expect(await tgt.balanceOf(mergeTgt)).to.equal(TgtDeposit1 + TgtDeposit2);
-      expect(await vult.balanceOf(mergeTgt)).to.equal("1000000000000000000000000"); 
-      expect(await vult.balanceOf(otherAccount1)).to.equal("187500000000000000000000");
-      expect(await vult.balanceOf(otherAccount2)).to.equal("62500000000000000000000");
 
       // Advance time by 365 days
       await ethers.provider.send("evm_increaseTime", [365 * 24 * 60 * 60]);

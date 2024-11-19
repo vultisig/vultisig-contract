@@ -58,6 +58,10 @@ async function main() {
   // To unlock
   // const lockedTx = await merge.setLockedStatus(1);
   // await lockedTx.wait(2);
+
+  //set launch time
+  //const setLaunchTimeTx = await mergeTgt.setLaunchTime();
+  //await setLaunchTimeTx.wait(2);
 }
 
 // We recommend this pattern to be able to use async/await everywhere
