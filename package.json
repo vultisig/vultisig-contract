@@ -2,6 +2,7 @@
   "name": "hardhat-project",
   "devDependencies": {
     "@layerzerolabs/solidity-examples": "^1.1.0",
+    "@nomicfoundation/hardhat-foundry": "^1.1.3",
     "@nomicfoundation/hardhat-toolbox": "^5.0.0",
     "@openzeppelin/contracts": "^4.9.6",
     "@uniswap/v3-core": "^1.0.1",

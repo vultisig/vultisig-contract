@@ -1,5 +1,6 @@
 import { HardhatUserConfig, vars } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-foundry";
 import "hardhat-erc1820"; // ERC777 is interacting with ERC1820 registry
 import * as dotenv from 'dotenv';  // Import dotenv for .env file support
 
