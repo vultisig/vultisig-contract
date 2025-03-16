@@ -13,7 +13,12 @@ contract TokenWhitelisted is Token {
     /// @notice whitelist contract address
     address private _whitelistContract;
 
-    constructor(string memory name_, string memory ticker_, address _lzEndpoint) Token(name_, ticker_, _lzEndpoint) {}
+    constructor(
+        string memory name_,
+        string memory ticker_,
+        address _lzEndpoint,
+        address _delegate
+    ) Token(name_, ticker_, _lzEndpoint, _delegate) {}
 
     /// @notice Returns current whitelist contract address
     function whitelistContract() external view returns (address) {
@@ -27,11 +32,11 @@ contract TokenWhitelisted is Token {
 
     /// @notice Before token transfer hook
     /// @dev It will call `checkWhitelist` function and if it's succsessful, it will transfer tokens, unless revert
-    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+    function _update(address from, address to, uint256 amount) internal override {
         require(to != address(this), "Cannot transfer to the token contract address");
         if (_whitelistContract != address(0)) {
             IWhitelist(_whitelistContract).checkWhitelist(from, to, amount);
         }
-        super._beforeTokenTransfer(from, to, amount);
+        super._update(from, to, amount);
     }
 }

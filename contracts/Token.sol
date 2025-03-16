@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {OFT} from "@layerzerolabs/solidity-examples/contracts/token/oft/v1/OFT.sol";
-import {OFTCore, IOFTCore} from "@layerzerolabs/solidity-examples/contracts/token/oft/v1/OFTCore.sol";
+import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
+import {IOFT, SendParam, MessagingFee, MessagingReceipt, OFTReceipt} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
@@ -18,7 +19,12 @@ contract Token is OFT, IERC1363 {
 
     error BridgeLocked();
 
-    constructor(string memory name_, string memory ticker_, address _lzEndpoint) OFT(name_, ticker_, _lzEndpoint) {
+    constructor(
+        string memory name_,
+        string memory ticker_,
+        address _lzEndpoint,
+        address _delegate
+    ) OFT(name_, ticker_, _lzEndpoint, _delegate) Ownable(_msgSender()) {
         _mint(_msgSender(), 10_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
@@ -61,20 +67,16 @@ contract Token is OFT, IERC1363 {
         return _ticker;
     }
 
-    function sendFrom(
-        address _from,
-        uint16 _dstChainId,
-        bytes calldata _toAddress,
-        uint _amount,
-        address payable _refundAddress,
-        address _zroPaymentAddress,
-        bytes calldata _adapterParams
-    ) public payable override(IOFTCore, OFTCore) {
+    function _send(
+        SendParam calldata _sendParam,
+        MessagingFee calldata _fee,
+        address _refundAddress
+    ) internal virtual override returns (MessagingReceipt memory msgReceipt, OFTReceipt memory oftReceipt) {
         if (bridgeLocked) {
             revert BridgeLocked();
         }
 
-        super.sendFrom(_from, _dstChainId, _toAddress, _amount, _refundAddress, _zroPaymentAddress, _adapterParams);
+        return super._send(_sendParam, _fee, _refundAddress);
     }
 
     /**

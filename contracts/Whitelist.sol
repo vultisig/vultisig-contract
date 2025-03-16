@@ -42,7 +42,7 @@ contract Whitelist is Ownable {
     mapping(address => uint256) private _contributed;
 
     /// @notice Set the default max address cap to 4 eth and lock token transfers initially
-    constructor() {
+    constructor() Ownable(_msgSender()) {
         _maxAddressCap = 4 ether;
         _locked = true; // Initially, liquidity will be locked
     }

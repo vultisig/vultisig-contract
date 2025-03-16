@@ -19,6 +19,11 @@ contract WhitelistMerge is Ownable {
     /// @notice Merge contract address
     address public merge;
 
+    constructor(address _token, address _merge) Ownable(_msgSender()) {
+        token = _token;
+        merge = _merge;
+    }
+
     /// @notice Check if called from token contract.
     modifier onlyToken() {
         if (_msgSender() != token) {

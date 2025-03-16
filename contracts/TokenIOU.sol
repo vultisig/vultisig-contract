@@ -19,7 +19,7 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
     error InvalidToAddress();
     error TransferLocked();
 
-    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) {
+    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {
         _mint(_msgSender(), 10_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
@@ -114,7 +114,7 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
 
     /// @notice Before token transfer hook
     /// @dev Not allowed to send tokens to the token contract itself, and during locked period, users can't transfer the tokens
-    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+    function _update(address from, address to, uint256 amount) internal override {
         if (to == address(this)) {
             revert InvalidToAddress();
         }
@@ -122,7 +122,7 @@ contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
         if (locked && from != merge && from != owner()) {
             revert TransferLocked();
         }
-        super._beforeTokenTransfer(from, to, amount);
+        super._update(from, to, amount);
     }
 
     /**

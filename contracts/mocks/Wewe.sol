@@ -12,7 +12,7 @@ contract Wewe is ERC20Burnable, Ownable {
     string private _name;
     string private _ticker;
 
-    constructor() ERC20("", "") {
+    constructor() ERC20("", "") Ownable(_msgSender()) {
         _mint(_msgSender(), 100_000_000_000 * 1e18);
     }
 

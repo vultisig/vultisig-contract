@@ -2,7 +2,7 @@
 pragma solidity ^0.8.9;
 
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-import {ReentrancyGuard} from "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {IWeweReceiver} from "./interfaces/IWeweReceiver.sol";
@@ -21,7 +21,7 @@ contract Merge is IMerge, IWeweReceiver, IERC1363Spender, Ownable, ReentrancyGua
 
     LockedStatus public lockedStatus;
 
-    constructor(address _wewe, address _vult) {
+    constructor(address _wewe, address _vult) Ownable(_msgSender()) {
         wewe = IERC20(_wewe);
         vult = IERC20(_vult);
     }
