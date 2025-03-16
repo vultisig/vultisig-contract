@@ -14,7 +14,8 @@ import {IOracle} from "./interfaces/IOracle.sol";
  * - Token contract `_beforeTokenTransfer` hook will call `checkWhitelist` function and this function will check if buyer is eligible
  */
 contract Whitelist is Ownable {
-    error NotWhitelisted();
+    error SenderNotWhitelisted();
+    error ReceiverNotWhitelisted();
     error Locked();
     error NotToken();
     error Blacklisted();
@@ -30,12 +31,18 @@ contract Whitelist is Ownable {
     address private _oracle;
     /// @notice Uniswap v3 pool address
     address private _pool;
-    /// @notice Total number of whitelisted addresses
-    uint256 private _whitelistCount;
-    /// @notice Max index allowed
-    uint256 private _allowedWhitelistIndex;
-    /// @notice Whitelist index for each whitelisted address
-    mapping(address => uint256) private _whitelistIndex;
+    /// @notice Total number of sender whitelisted addresses
+    uint256 private _senderWhitelistCount;
+    /// @notice Total number of receiver whitelisted addresses
+    uint256 private _receiverWhitelistCount;
+    /// @notice Max index allowed for sender whitelist
+    uint256 private _allowedSenderWhitelistIndex;
+    /// @notice Max index allowed for receiver whitelist
+    uint256 private _allowedReceiverWhitelistIndex;
+    /// @notice Sender whitelist index for each address
+    mapping(address => uint256) private _senderWhitelistIndex;
+    /// @notice Receiver whitelist index for each address
+    mapping(address => uint256) private _receiverWhitelistIndex;
     /// @notice Mapping for blacklisted addresses
     mapping(address => bool) private _isBlacklisted;
     /// @notice Contributed ETH amounts
@@ -45,6 +52,8 @@ contract Whitelist is Ownable {
     constructor() {
         _maxAddressCap = 4 ether;
         _locked = true; // Initially, liquidity will be locked
+        _allowedSenderWhitelistIndex = 0;
+        _allowedReceiverWhitelistIndex = 0;
     }
 
     /// @notice Check if called from token contract.
@@ -65,10 +74,16 @@ contract Whitelist is Ownable {
         return _token;
     }
 
-    /// @notice Returns the whitelisted index. If not whitelisted, then it will be 0
+    /// @notice Returns the sender whitelisted index. If not whitelisted, then it will be 0
     /// @param account The address to be checked
-    function whitelistIndex(address account) external view returns (uint256) {
-        return _whitelistIndex[account];
+    function senderWhitelistIndex(address account) external view returns (uint256) {
+        return _senderWhitelistIndex[account];
+    }
+    
+    /// @notice Returns the receiver whitelisted index. If not whitelisted, then it will be 0
+    /// @param account The address to be checked
+    function receiverWhitelistIndex(address account) external view returns (uint256) {
+        return _receiverWhitelistIndex[account];
     }
 
     /// @notice Returns if the account is blacklisted or not
@@ -87,14 +102,24 @@ contract Whitelist is Ownable {
         return _pool;
     }
 
-    /// @notice Returns current whitelisted address count
-    function whitelistCount() external view returns (uint256) {
-        return _whitelistCount;
+    /// @notice Returns current sender whitelisted address count
+    function senderWhitelistCount() external view returns (uint256) {
+        return _senderWhitelistCount;
+    }
+    
+    /// @notice Returns current receiver whitelisted address count
+    function receiverWhitelistCount() external view returns (uint256) {
+        return _receiverWhitelistCount;
     }
 
-    /// @notice Returns current allowed whitelist index
-    function allowedWhitelistIndex() external view returns (uint256) {
-        return _allowedWhitelistIndex;
+    /// @notice Returns current allowed sender whitelist index
+    function allowedSenderWhitelistIndex() external view returns (uint256) {
+        return _allowedSenderWhitelistIndex;
+    }
+    
+    /// @notice Returns current allowed receiver whitelist index
+    function allowedReceiverWhitelistIndex() external view returns (uint256) {
+        return _allowedReceiverWhitelistIndex;
     }
 
     /// @notice Returns contributed ETH amount for address
@@ -145,66 +170,127 @@ contract Whitelist is Ownable {
         _isBlacklisted[blacklisted] = flag;
     }
 
-    /// @notice Setter for allowed whitelist index
-    /// @param newIndex New index for allowed whitelist
-    function setAllowedWhitelistIndex(uint256 newIndex) external onlyOwner {
-        _allowedWhitelistIndex = newIndex;
+    /// @notice Setter for allowed sender whitelist index
+    /// @param newIndex New index for allowed sender whitelist
+    function setAllowedSenderWhitelistIndex(uint256 newIndex) external onlyOwner {
+        _allowedSenderWhitelistIndex = newIndex;
+    }
+    
+    /// @notice Setter for allowed receiver whitelist index
+    /// @param newIndex New index for allowed receiver whitelist
+    function setAllowedReceiverWhitelistIndex(uint256 newIndex) external onlyOwner {
+        _allowedReceiverWhitelistIndex = newIndex;
     }
 
-    /// @notice Add whitelisted address
+    /// @notice Add sender whitelisted address
     /// @param whitelisted Address to be added
-    function addWhitelistedAddress(address whitelisted) external onlyOwner {
-        _addWhitelistedAddress(whitelisted);
+    function addSenderWhitelistedAddress(address whitelisted) external onlyOwner {
+        _addSenderWhitelistedAddress(whitelisted);
     }
 
-    /// @notice Add batch whitelists
+    /// @notice Add receiver whitelisted address
+    /// @param whitelisted Address to be added
+    function addReceiverWhitelistedAddress(address whitelisted) external onlyOwner {
+        _addReceiverWhitelistedAddress(whitelisted);
+    }
+
+    /// @notice Add batch sender whitelists
     /// @param whitelisted Array of addresses to be added
-    function addBatchWhitelist(address[] calldata whitelisted) external onlyOwner {
+    function addBatchSenderWhitelist(address[] calldata whitelisted) external onlyOwner {
         for (uint i = 0; i < whitelisted.length; i++) {
-            _addWhitelistedAddress(whitelisted[i]);
+            _addSenderWhitelistedAddress(whitelisted[i]);
+        }
+    }
+    
+    /// @notice Add batch receiver whitelists
+    /// @param whitelisted Array of addresses to be added
+    function addBatchReceiverWhitelist(address[] calldata whitelisted) external onlyOwner {
+        for (uint i = 0; i < whitelisted.length; i++) {
+            _addReceiverWhitelistedAddress(whitelisted[i]);
         }
     }
 
-    /// @notice Check if address to is eligible for whitelist
+    /// @notice Check if addresses are eligible for whitelist
     /// @param from sender address
     /// @param to recipient address
     /// @param amount Number of tokens to be transferred
-    /// @dev Check WL should be applied only
+    /// @dev Check if both sender and receiver are whitelisted
     /// @dev Revert if locked, not whitelisted, blacklisted or already contributed more than capped amount
     /// @dev Update contributed amount
     function checkWhitelist(address from, address to, uint256 amount) external onlyToken {
-        if (from == _pool && to != owner()) {
-            // We only add limitations for buy actions via uniswap v3 pool
-            // Still need to ignore WL check if it's owner related actions
-            if (_locked) {
-                revert Locked();
-            }
+        // Skip checks for transactions involving the owner
+        if (from == owner() || to == owner()) {
+            return;
+        }
+        
+        if (_locked) {
+            revert Locked();
+        }
 
-            if (_isBlacklisted[to]) {
-                revert Blacklisted();
-            }
+        // Check if sender is blacklisted
+        if (_isBlacklisted[from]) {
+            revert Blacklisted();
+        }
+        
+        // Check if receiver is blacklisted
+        if (_isBlacklisted[to]) {
+            revert Blacklisted();
+        }
 
+        // Special handling for purchases from Uniswap pool
+        if (from == _pool) {
+            // Check if receiver is on the receiver whitelist
             if (
-                _allowedWhitelistIndex == 0 || _whitelistIndex[to] == 0 || _whitelistIndex[to] > _allowedWhitelistIndex
+                _allowedReceiverWhitelistIndex == 0 || 
+                _receiverWhitelistIndex[to] == 0 || 
+                _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
             ) {
-                revert NotWhitelisted();
+                revert ReceiverNotWhitelisted();
             }
-
-            // // Calculate rough ETH amount for TK amount
+            
+            // Calculate rough ETH amount for TK amount
             uint256 estimatedETHAmount = IOracle(_oracle).peek(amount);
             if (_contributed[to] + estimatedETHAmount > _maxAddressCap) {
                 revert MaxAddressCapOverflow();
             }
 
             _contributed[to] += estimatedETHAmount;
+            return;
+        }
+
+        // For non-pool transactions, check both sender and receiver whitelists
+        // Check if sender is on the sender whitelist
+        if (
+            _allowedSenderWhitelistIndex == 0 || 
+            _senderWhitelistIndex[from] == 0 || 
+            _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
+        ) {
+            revert SenderNotWhitelisted();
+        }
+        
+        // Check if receiver is on the receiver whitelist
+        if (
+            _allowedReceiverWhitelistIndex == 0 || 
+            _receiverWhitelistIndex[to] == 0 || 
+            _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
+        ) {
+            revert ReceiverNotWhitelisted();
         }
     }
 
-    /// @notice Internal function used for whitelisting. Only increase whitelist count if address is not whitelisted before
+    /// @notice Internal function used for sender whitelisting. Only increase whitelist count if address is not whitelisted before
     /// @param whitelisted Address to be added
-    function _addWhitelistedAddress(address whitelisted) private {
-        if (_whitelistIndex[whitelisted] == 0) {
-            _whitelistIndex[whitelisted] = ++_whitelistCount;
+    function _addSenderWhitelistedAddress(address whitelisted) private {
+        if (_senderWhitelistIndex[whitelisted] == 0) {
+            _senderWhitelistIndex[whitelisted] = ++_senderWhitelistCount;
+        }
+    }
+    
+    /// @notice Internal function used for receiver whitelisting. Only increase whitelist count if address is not whitelisted before
+    /// @param whitelisted Address to be added
+    function _addReceiverWhitelistedAddress(address whitelisted) private {
+        if (_receiverWhitelistIndex[whitelisted] == 0) {
+            _receiverWhitelistIndex[whitelisted] = ++_receiverWhitelistCount;
         }
     }
 }
