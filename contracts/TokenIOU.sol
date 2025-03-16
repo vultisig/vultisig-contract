@@ -1,77 +1,56 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-<<<<<<< HEAD
-import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-=======
-import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
-import {IOFT, SendParam, MessagingFee, MessagingReceipt, OFTReceipt} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
->>>>>>> cd6fd51 (all: migrate to oz5, lz-v2, add tests)
+import {ERC20, ERC20Burnable} from "@openzeppelin/contracts/token/ERC20/extensions/ERC20Burnable.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
-
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
 
 /**
- * @title Token with ERC1363 standard functions like approveAndCall, transferAndCall
+ * @title ERC20Burnable with ERC1363 standard functions like approveAndCall, transferAndCall
  */
-contract Token is ERC20, Ownable, IERC1363 {
+contract TokenIOU is ERC20Burnable, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
+    address public merge;
+    bool public locked;
 
-    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable() {
-        _mint(_msgSender(), 100_000_000 * 1e18);
+    error InvalidToAddress();
+    error TransferLocked();
+
+    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {
+        _mint(_msgSender(), 10_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
+        locked = true;
     }
 
     function mint(uint256 amount) external onlyOwner {
-        _mint(_msgSender(), amount);
-    }
-    
-    /**
-     * @dev Burns a specific amount of tokens.
-     * @param amount The amount of token to be burned.
-     */
-    function burn(uint256 amount) external {
-        _burn(_msgSender(), amount);
+        _mint(owner(), amount);
     }
 
+    //////////////////////////////
+    //  External owner setters  //
+    //////////////////////////////
     function setNameAndTicker(string calldata name_, string calldata ticker_) external onlyOwner {
         _name = name_;
         _ticker = ticker_;
     }
-
-
-
-    /**
-     * @dev Destroys `amount` tokens from `account`, deducting from the caller's allowance.
-     * See {ERC20-_burn} and {ERC20-allowance}.
-     */
-    function burnFrom(address account, uint256 amount) external {
-        _spendAllowance(account, _msgSender(), amount);
-        _burn(account, amount);
+    function setMerge(address _merge) external onlyOwner {
+        merge = _merge;
     }
 
-    function name() public view override(ERC20) returns (string memory) {
+    function setLocked(bool newFlag) external onlyOwner {
+        locked = newFlag;
+    }
+
+    function name() public view override returns (string memory) {
         return _name;
     }
 
-    function symbol() public view override(ERC20) returns (string memory) {
+    function symbol() public view override returns (string memory) {
         return _ticker;
-    }
-
-    function _send(
-        SendParam calldata _sendParam,
-        MessagingFee calldata _fee,
-        address _refundAddress
-    ) internal virtual override returns (MessagingReceipt memory msgReceipt, OFTReceipt memory oftReceipt) {
-        if (bridgeLocked) {
-            revert BridgeLocked();
-        }
-
-        return super._send(_sendParam, _fee, _refundAddress);
     }
 
     /**
@@ -131,6 +110,19 @@ contract Token is ERC20, Ownable, IERC1363 {
         }
         _checkOnApprovalReceived(spender, value, data);
         return true;
+    }
+
+    /// @notice Before token transfer hook
+    /// @dev Not allowed to send tokens to the token contract itself, and during locked period, users can't transfer the tokens
+    function _update(address from, address to, uint256 amount) internal override {
+        if (to == address(this)) {
+            revert InvalidToAddress();
+        }
+        // While locked, only allow transfer from merge contract and owner
+        if (locked && from != merge && from != owner()) {
+            revert TransferLocked();
+        }
+        super._update(from, to, amount);
     }
 
     /**
