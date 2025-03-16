@@ -10,12 +10,12 @@ const FEE = 10000; // 1% fee
 
 async function main() {
   // After token deployments, update trusted remote and dst min gaslimit
-  const network = hre.network.name as "mainnet" | "sepolia" | "base";
+  const network = hre.network.name as "mainnet" | "sepolia";
 
   const TokenWhitelisted = await ethers.getContractFactory("TokenWhitelisted");
   const Whitelist = await ethers.getContractFactory("Whitelist");
 
-  // Always make sure for BASE, it should be 10m, and for ETH, 90m initial supply
+  // Initial supply for ETH mainnet should be 90m
   const token = await TokenWhitelisted.deploy("TKE", "Token-ETH", LZ[network]);
   await token.waitForDeployment();
 

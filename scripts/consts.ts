@@ -7,10 +7,7 @@ export const UNISWAP = {
     factory: "0x1F98431c8aD98523631AE4a59f267346ea31F984",
     nfpm: "0xC36442b4a4522E871399CD717aBDD847Ab11FE88",
   },
-  base: {
-    factory: "0x33128a8fC17869897dcE68Ed026d694621f6FDfD",
-    nfpm: "0x4f225937EDc33EFD6109c4ceF7b560B2D6401009",
-  },
+
 };
 
 export const USDC = {
@@ -20,6 +17,5 @@ export const USDC = {
 
 export const LZ = {
   sepolia: "",
-  base: "0xb6319cC6c8c27A8F5dAF0dD3DF91EA35C4720dd7",
   mainnet: "0x66A71Dcef29A0fFBDBE3c6a460a3B5BC225Cd675",
 };

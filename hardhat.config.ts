@@ -23,16 +23,11 @@ const config: HardhatUserConfig = {
       chainId: 1,
       accounts: [vars.get("VULT_TEMP_DEPLOYER_KEY")],
     },
-    base: {
-      url: `https://base-mainnet.g.alchemy.com/v2/${vars.get("VULTISIG_ALCHEMY_KEY")}`,
-      chainId: 8453,
-      accounts: [vars.get("VULT_TEMP_DEPLOYER_KEY")],
-    },
+
   },
   etherscan: {
     apiKey: {
       mainnet: vars.get("MAINNET_KEY"),
-      base: vars.get("BASE_KEY"),
     },
   },
   typechain: {

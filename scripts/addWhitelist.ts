@@ -1153,7 +1153,7 @@ const WL = [
 ];
 
 async function main() {
-  const network = hre.network.name as "mainnet" | "sepolia" | "base";
+  const network = hre.network.name as "mainnet" | "sepolia";
   const whitelist = await ethers.getContractAt("Whitelist", "0xFafe8900686Eb0F9303Fe3b1B2992753322c2585");
   //   for (let i = 0; i < WL.length; i++) {
   //     const newArr = [...WL];
