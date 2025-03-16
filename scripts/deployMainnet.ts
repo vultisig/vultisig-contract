@@ -4,19 +4,19 @@ import { abi as FACTORY_ABI } from "@uniswap/v3-core/artifacts/contracts/Uniswap
 import { computePoolAddress, encodeSqrtRatioX96 } from "@uniswap/v3-sdk";
 import { Token } from "@uniswap/sdk-core";
 import { UniswapV3Factory } from "../typechain-types";
-import { UNISWAP, USDC, LZ } from "./consts";
+import { UNISWAP, USDC } from "./consts";
 
 const FEE = 10000; // 1% fee
 
 async function main() {
-  // After token deployments, update trusted remote and dst min gaslimit
+  // After token deployments
   const network = hre.network.name as "mainnet" | "sepolia";
 
   const TokenWhitelisted = await ethers.getContractFactory("TokenWhitelisted");
   const Whitelist = await ethers.getContractFactory("Whitelist");
 
   // Initial supply for ETH mainnet should be 90m
-  const token = await TokenWhitelisted.deploy("TKE", "Token-ETH", LZ[network]);
+  const token = await TokenWhitelisted.deploy("TKE", "Token-ETH");
   await token.waitForDeployment();
 
   const whitelist = await Whitelist.deploy();

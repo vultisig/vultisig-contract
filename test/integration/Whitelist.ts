@@ -37,7 +37,7 @@ describe("TokenWhitelisted with Whitelist", function () {
     const Whitelist = await ethers.getContractFactory("Whitelist");
     const WETH = await ethers.getContractFactory("WETH9");
 
-    const token = await TokenWhitelisted.deploy("", "", ethers.ZeroAddress);
+    const token = await TokenWhitelisted.deploy("", "");
     const whitelist = await Whitelist.deploy();
     const mockWETH = await WETH.deploy();
 

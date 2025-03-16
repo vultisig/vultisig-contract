@@ -7,7 +7,7 @@ describe("TokenWhitelisted", function () {
     const [owner, otherAccount] = await ethers.getSigners();
 
     const TokenWhitelisted = await ethers.getContractFactory("TokenWhitelisted");
-    const token = await TokenWhitelisted.deploy("", "", ethers.ZeroAddress);
+    const token = await TokenWhitelisted.deploy("", "");
 
     const MockWhitelistSuccess = await ethers.getContractFactory("MockWhitelistSuccess");
     const MockWhitelistFail = await ethers.getContractFactory("MockWhitelistFail");

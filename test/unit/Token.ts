@@ -7,7 +7,7 @@ describe("Token", function () {
     const [owner, otherAccount] = await ethers.getSigners();
 
     const Token = await ethers.getContractFactory("Token");
-    const token = await Token.deploy("", "", ethers.ZeroAddress);
+    const token = await Token.deploy("", "");
 
     return { token, owner, otherAccount };
   }
