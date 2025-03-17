@@ -544,54 +544,38 @@ contract TokenTest is Test {
         vm.prank(owner);
         whitelist.setPhase(WhitelistV2.Phase.LIMITED_POOL_TRADING);
 
-        // Transfer tokens to user1 for testing
-        vm.prank(owner);
-        tokenA.transfer(user1, 2000 ether);
+        // User1 needs WETH to buy tokens
+        deal(WETH_ADDRESS, user1, 2 ether); // Give user1 2 ETH worth of WETH
 
-        // User1 approves router to spend tokens
+        // User1 approves router to spend WETH
         vm.startPrank(user1);
-        tokenA.approve(address(swapRouter), 2000 ether);
+        IERC20(WETH_ADDRESS).approve(address(swapRouter), 2 ether);
 
-        // Set up swap parameters to sell tokens
-        // Since we're in Phase 1, we should be able to swap up to 1 ETH worth of tokens
-
-        // Estimate the amount of tokens that would be worth 0.9 ETH
-        // Assuming our token price from pool initialization: 1 tokenA = 0.0001 WETH
-        // So 0.9 ETH worth would be about 9000 tokens
-        uint256 tokenAmountToSell = 900 ether; // This should be under 1 ETH worth
-
-        // Execute swap using SwapRouter
+        // First swap: Should succeed as it's under 1 ETH limit
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: address(tokenA),
-            tokenOut: WETH_ADDRESS,
+            tokenIn: WETH_ADDRESS,
+            tokenOut: address(tokenA),
             fee: FEE_TIER,
             recipient: user1,
             deadline: block.timestamp + 60,
-            amountIn: tokenAmountToSell,
+            amountIn: 0.9 ether, // Under the 1 ETH limit
             amountOutMinimum: 0, // No minimum for test
             sqrtPriceLimitX96: 0 // No price limit
         });
 
         uint256 amountOut = swapRouter.exactInputSingle(swapParams);
+        assertTrue(amountOut > 0, "First swap failed");
 
-        // Verify swap succeeded
-        assertTrue(amountOut > 0, "Swap failed");
-        vm.stopPrank();
-
-        // Try to swap more than the 1 ETH limit
-        // Attempt another swap that would exceed the limit
-        vm.startPrank(user1);
-
-        // This should revert because we've already used up most of our limit
+        // Second swap: Should fail as it would exceed the 1 ETH limit
         vm.expectRevert("Transaction not allowed by whitelist");
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: address(tokenA),
-                tokenOut: WETH_ADDRESS,
+                tokenIn: WETH_ADDRESS,
+                tokenOut: address(tokenA),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 200 ether, // This would push us over the limit
+                amountIn: 0.2 ether, // This would push us over the 1 ETH limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -604,64 +588,56 @@ contract TokenTest is Test {
         // Test the increased limit in Phase 2
 
         // Set whitelist to Phase 2 (Extended trading)
-        vm.startPrank(owner);
+        vm.prank(owner);
         whitelist.setPhase(WhitelistV2.Phase.EXTENDED_POOL_TRADING);
 
-        // Transfer tokens to user1 for testing
-        tokenA.transfer(user1, 50000 ether);
+        // Give user1 enough WETH to test the 4 ETH limit
+        deal(WETH_ADDRESS, user1, 5 ether);
 
-        // User1 approves router to spend tokens
+        // User1 approves router to spend WETH
         vm.startPrank(user1);
-        tokenA.approve(address(swapRouter), 50000 ether);
+        IERC20(WETH_ADDRESS).approve(address(swapRouter), 5 ether);
 
-        // In Phase 2, we can swap up to 4 ETH worth of tokens
-        // At our price ratio, that would be about 40000 tokens
-        uint256 tokenAmountToSell = 3 ether; // This should be under 4 ETH worth
-
-        // Execute swap using SwapRouter
+        // First swap: 3 ETH worth (should succeed)
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: address(tokenA),
-            tokenOut: WETH_ADDRESS,
+            tokenIn: WETH_ADDRESS,
+            tokenOut: address(tokenA),
             fee: FEE_TIER,
             recipient: user1,
             deadline: block.timestamp + 60,
-            amountIn: tokenAmountToSell,
-            amountOutMinimum: 0, // No minimum for test
-            sqrtPriceLimitX96: 0 // No price limit
+            amountIn: 3 ether, // Under the 4 ETH limit
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
         });
 
         uint256 amountOut = swapRouter.exactInputSingle(swapParams);
+        assertTrue(amountOut > 0, "First swap failed");
 
-        // Verify swap succeeded
-        assertTrue(amountOut > 0, "Swap failed");
-
-        // Try to swap more, should still work if we're under the limit
-        uint256 secondSwapAmount = 0.1 ether;
+        // Second swap: 0.9 ETH worth (should succeed)
         uint256 amountOut2 = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: address(tokenA),
-                tokenOut: WETH_ADDRESS,
+                tokenIn: WETH_ADDRESS,
+                tokenOut: address(tokenA),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: secondSwapAmount,
+                amountIn: 0.9 ether, // Still under the 4 ETH total limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
         );
-
         assertTrue(amountOut2 > 0, "Second swap failed");
 
-        // This should revert because we've used up our limit
+        // Third swap: Should fail as it would exceed the 4 ETH limit
         vm.expectRevert("Transaction not allowed by whitelist");
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: address(tokenA),
-                tokenOut: WETH_ADDRESS,
+                tokenIn: WETH_ADDRESS,
+                tokenOut: address(tokenA),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 5000 ether, // This would push us over the limit
+                amountIn: 0.2 ether, // This would push us over the 4 ETH limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -677,29 +653,26 @@ contract TokenTest is Test {
         vm.prank(owner);
         whitelist.setPhase(WhitelistV2.Phase.PUBLIC);
 
-        // Transfer tokens to non-whitelisted user
-        vm.prank(owner);
-        tokenA.transfer(nonWhitelistedUser, 5000 ether);
+        // Give non-whitelisted user some WETH
+        deal(WETH_ADDRESS, nonWhitelistedUser, 10 ether);
 
-        // Non-whitelisted user should be able to swap tokens
+        // Non-whitelisted user should be able to swap any amount
         vm.startPrank(nonWhitelistedUser);
-        tokenA.approve(address(swapRouter), 5000 ether);
+        IERC20(WETH_ADDRESS).approve(address(swapRouter), 10 ether);
 
-        // Execute swap
+        // Execute swap with a large amount (should succeed in PUBLIC phase)
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: address(tokenA),
-            tokenOut: WETH_ADDRESS,
+            tokenIn: WETH_ADDRESS,
+            tokenOut: address(tokenA),
             fee: FEE_TIER,
             recipient: nonWhitelistedUser,
             deadline: block.timestamp + 60,
-            amountIn: 5000 ether,
+            amountIn: 5 ether, // Large amount, should work in PUBLIC phase
             amountOutMinimum: 0,
             sqrtPriceLimitX96: 0
         });
 
         uint256 amountOut = swapRouter.exactInputSingle(swapParams);
-
-        // Verify swap succeeded
         assertTrue(amountOut > 0, "Swap failed for non-whitelisted user in PUBLIC phase");
 
         vm.stopPrank();

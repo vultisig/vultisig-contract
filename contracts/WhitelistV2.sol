@@ -5,6 +5,24 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./interfaces/IUniswapV3Pool.sol";
 
+// Add this interface near the top of the file, after the imports
+interface IQuoter {
+    struct QuoteExactInputSingleParams {
+        address tokenIn;
+        address tokenOut;
+        uint256 amountIn;
+        uint24 fee;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    function quoteExactInputSingle(
+        QuoteExactInputSingleParams calldata params
+    )
+        external
+        view
+        returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
+}
+
 /**
  * @title TokenWhitelist
  * @dev Manages whitelisted users, pools, and launch phases for a token
@@ -36,6 +54,10 @@ contract WhitelistV2 is Ownable {
     // Purchase limits by phase
     uint256 public constant PHASE1_ETH_LIMIT = 1 ether;
     uint256 public constant PHASE2_ETH_LIMIT = 4 ether;
+
+    // Add this state variable
+    address public constant UNISWAP_QUOTER = 0x5e55C9e631FAE526cd4B0526C4818D6e0a9eF0e3;
+    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // Mainnet WETH address
 
     // Events
     event PhaseAdvanced(Phase newPhase);
@@ -282,7 +304,7 @@ contract WhitelistV2 is Ownable {
     }
 
     /**
-     * @dev Gets the ETH value for a token amount using Uniswap V3 TWAP oracle, or returns the starting
+     * @dev Gets the ETH value for a token amount using Uniswap V3 Quoter, or returns the starting
      * amount if no trades have been made on the pool
      * @param tokenAmount Amount of tokens
      * @return ethValue Equivalent ETH value
@@ -290,45 +312,34 @@ contract WhitelistV2 is Ownable {
     function getEthValueForToken(uint256 tokenAmount) public view returns (uint256) {
         require(uniswapV3OraclePool != address(0), "Oracle pool not set");
 
-        // Get TWAP from Uniswap v3 pool
-        // We'll use a 30-minute TWAP to prevent manipulation
-        uint32[] memory secondsAgos = new uint32[](2);
-        secondsAgos[0] = 300; // 5 minutes ago
-        secondsAgos[1] = 0; // Current
+        // Get the token addresses from the pool
+        address token0 = IUniswapV3Pool(uniswapV3OraclePool).token0();
+        address token1 = IUniswapV3Pool(uniswapV3OraclePool).token1();
+        uint24 fee = IUniswapV3Pool(uniswapV3OraclePool).fee();
 
-        // Check if observations are available
-        (uint32 _observationTime, int56 tickCumulative, uint16 _observationIndex, bool initialized) = IUniswapV3Pool(
-            uniswapV3OraclePool
-        ).observations(0);
-        if (!initialized || tickCumulative == 0) {
+        // Determine which token is WETH and which is our token
+        (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
+
+        try
+            IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
+                IQuoter.QuoteExactInputSingleParams({
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    amountIn: tokenAmount,
+                    fee: fee,
+                    sqrtPriceLimitX96: 0
+                })
+            )
+        returns (
+            uint256 amountReceived,
+            uint160 sqrtPriceX96After,
+            uint32 initializedTicksCrossed,
+            uint256 gasEstimate
+        ) {
+            return amountReceived;
+        } catch {
+            // Fallback to initial price if quote fails
             return tokenAmount / 10 ** 18; // 0.0001 ETH per token initial price
-        }
-
-        (int56[] memory tickCumulatives, ) = IUniswapV3Pool(uniswapV3OraclePool).observe(secondsAgos);
-
-        // Calculate the average tick over the time period
-        int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
-        int24 timeWeightedAverageTick = int24(tickCumulativesDelta / 300);
-
-        // Convert average tick to price using the formula: price = 1.0001^tick
-        uint256 price = calculatePriceFromTick(timeWeightedAverageTick);
-
-        // Convert token amount to ETH value
-        return (tokenAmount * price) / (10 ** 18);
-    }
-
-    /**
-     * @dev Calculates price from tick
-     * @param tick The tick value
-     * @return price The price corresponding to the tick
-     */
-    function calculatePriceFromTick(int24 tick) internal pure returns (uint256) {
-        // This is a simplified version; a real implementation would be more precise
-        // price = 1.0001^tick
-        if (tick < 0) {
-            return (10 ** 18 * 10000) / uint256(uint24(-tick) + 10000);
-        } else {
-            return (10 ** 18 * (uint256(uint24(tick)) + 10000)) / 10000;
         }
     }
 }
