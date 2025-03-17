@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.20;
+pragma solidity ^0.8.28;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -15,7 +15,9 @@ interface IQuoter {
         uint160 sqrtPriceLimitX96;
     }
 
-    function quoteExactInputSingle(QuoteExactInputSingleParams calldata params)
+    function quoteExactInputSingle(
+        QuoteExactInputSingleParams calldata params
+    )
         external
         view
         returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
@@ -34,7 +36,6 @@ contract WhitelistV2 is Ownable {
         LIMITED_POOL_TRADING, // Phase 1: Whitelisted users can trade with pools up to 1 ETH
         EXTENDED_POOL_TRADING, // Phase 2: Whitelisted users can trade with pools up to 4 ETH
         PUBLIC // Phase 3: No restrictions
-
     }
 
     // Current launch phase
@@ -67,13 +68,15 @@ contract WhitelistV2 is Ownable {
     event OraclePoolUpdated(address indexed newOraclePool);
     event EthSpent(address indexed user, uint256 amount);
     event PhaseLimitsUpdated(
-        uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
+        uint256 oldPhase1EthLimit,
+        uint256 oldPhase2EthLimit,
+        uint256 newPhase1EthLimit,
+        uint256 newPhase2EthLimit
     );
     /**
      * @dev Constructor
      * @param initialOwner Address of the contract owner
      */
-
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.WHITELIST_ONLY;
         emit PhaseAdvanced(currentPhase);
@@ -290,7 +293,7 @@ contract WhitelistV2 is Ownable {
         // Phase 1 & 2: Whitelisted pools trading with ETH limits
         if (currentPhase == Phase.LIMITED_POOL_TRADING || currentPhase == Phase.EXTENDED_POOL_TRADING) {
             // If recipient is a whitelisted pool, check ETH spending limits
-            if (isPoolWhitelisted(from)) {
+            if (isPoolWhitelisted(to) && isUserWhitelisted(from)) {
                 uint256 ethValue = getEthValueForToken(amount);
                 uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1EthLimit : phase2EthLimit;
 
@@ -328,16 +331,21 @@ contract WhitelistV2 is Ownable {
         // Determine which token is WETH and which is our token
         (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
 
-        try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
-            IQuoter.QuoteExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                amountIn: tokenAmount,
-                fee: fee,
-                sqrtPriceLimitX96: 0
-            })
-        ) returns (
-            uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
+        try
+            IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
+                IQuoter.QuoteExactInputSingleParams({
+                    tokenIn: tokenIn,
+                    tokenOut: tokenOut,
+                    amountIn: tokenAmount,
+                    fee: fee,
+                    sqrtPriceLimitX96: 0
+                })
+            )
+        returns (
+            uint256 amountReceived,
+            uint160 sqrtPriceX96After,
+            uint32 initializedTicksCrossed,
+            uint256 gasEstimate
         ) {
             return amountReceived;
         } catch {
