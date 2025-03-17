@@ -19,9 +19,10 @@ contract Token is ERC20, Ownable, IERC1363 {
     bool public whitelistRevoked = false;
 
     event WhitelistContractUpdated(address indexed whitelist);
+
     error WhitelistRevoked();
 
-    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {  
+    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {
         _mint(_msgSender(), 100_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
@@ -89,12 +90,11 @@ contract Token is ERC20, Ownable, IERC1363 {
     /**
      * @inheritdoc IERC1363
      */
-    function transferFromAndCall(
-        address from,
-        address to,
-        uint256 value,
-        bytes memory data
-    ) public virtual returns (bool) {
+    function transferFromAndCall(address from, address to, uint256 value, bytes memory data)
+        public
+        virtual
+        returns (bool)
+    {
         if (!transferFrom(from, to, value)) {
             revert ERC1363TransferFromFailed(from, to, value);
         }

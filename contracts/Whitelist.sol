@@ -196,7 +196,7 @@ contract Whitelist is Ownable {
     /// @notice Add batch sender whitelists
     /// @param whitelisted Array of addresses to be added
     function addBatchSenderWhitelist(address[] calldata whitelisted) external onlyOwner {
-        for (uint i = 0; i < whitelisted.length; i++) {
+        for (uint256 i = 0; i < whitelisted.length; i++) {
             _addSenderWhitelistedAddress(whitelisted[i]);
         }
     }
@@ -204,7 +204,7 @@ contract Whitelist is Ownable {
     /// @notice Add batch receiver whitelists
     /// @param whitelisted Array of addresses to be added
     function addBatchReceiverWhitelist(address[] calldata whitelisted) external onlyOwner {
-        for (uint i = 0; i < whitelisted.length; i++) {
+        for (uint256 i = 0; i < whitelisted.length; i++) {
             _addReceiverWhitelistedAddress(whitelisted[i]);
         }
     }
@@ -237,9 +237,8 @@ contract Whitelist is Ownable {
             // Owner check already handled above
             // Check if sender is on the sender whitelist
             if (
-                _allowedSenderWhitelistIndex == 0 ||
-                _senderWhitelistIndex[from] == 0 ||
-                _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
+                _allowedSenderWhitelistIndex == 0 || _senderWhitelistIndex[from] == 0
+                    || _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
             ) {
                 revert Locked();
             }
@@ -254,9 +253,8 @@ contract Whitelist is Ownable {
         if (from == _pool) {
             // Check if receiver is on the receiver whitelist
             if (
-                _allowedReceiverWhitelistIndex == 0 ||
-                _receiverWhitelistIndex[to] == 0 ||
-                _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
+                _allowedReceiverWhitelistIndex == 0 || _receiverWhitelistIndex[to] == 0
+                    || _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
             ) {
                 revert ReceiverNotWhitelisted();
             }
@@ -274,18 +272,16 @@ contract Whitelist is Ownable {
         // For non-pool transactions, check both sender and receiver whitelists
         // Check if sender is on the sender whitelist
         if (
-            _allowedSenderWhitelistIndex == 0 ||
-            _senderWhitelistIndex[from] == 0 ||
-            _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
+            _allowedSenderWhitelistIndex == 0 || _senderWhitelistIndex[from] == 0
+                || _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
         ) {
             revert SenderNotWhitelisted();
         }
 
         // Check if receiver is on the receiver whitelist
         if (
-            _allowedReceiverWhitelistIndex == 0 ||
-            _receiverWhitelistIndex[to] == 0 ||
-            _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
+            _allowedReceiverWhitelistIndex == 0 || _receiverWhitelistIndex[to] == 0
+                || _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
         ) {
             revert ReceiverNotWhitelisted();
         }

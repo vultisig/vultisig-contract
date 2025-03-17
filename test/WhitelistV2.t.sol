@@ -31,9 +31,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(
-        MintParams calldata params
-    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(MintParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 // Uniswap V3 Router Interface
@@ -95,21 +95,21 @@ contract WhitelistV2Test is Test {
         // Try to use Alchemy if available, otherwise fall back to Infura
         string memory alchemyKey;
         string memory infuraKey;
-        
+
         // Try to get Alchemy key
         try vm.envString("VULTISIG_ALCHEMY_KEY") returns (string memory value) {
             alchemyKey = value;
         } catch {
             alchemyKey = "";
         }
-        
+
         // Try to get Infura key
         try vm.envString("VULTISIG_INFURA_KEY") returns (string memory value) {
             infuraKey = value;
         } catch {
             infuraKey = "";
         }
-        
+
         if (bytes(alchemyKey).length > 0) {
             // Use Alchemy if key is available
             string memory alchemyUrl = string.concat("https://eth-mainnet.g.alchemy.com/v2/", alchemyKey);
@@ -149,7 +149,7 @@ contract WhitelistV2Test is Test {
         vm.deal(nonWhitelistedUser, 100 ether);
 
         // Get WETH by wrapping ETH
-        (bool success, ) = WETH_ADDRESS.call{value: 10 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 10 ether}("");
         require(success, "Failed to get WETH");
 
         // Deploy the whitelist contract
@@ -230,17 +230,17 @@ contract WhitelistV2Test is Test {
 
     function testPhaseAdvancement() public {
         // Test initial phase
-        assertEq(uint(whitelist.currentPhase()), uint(WhitelistV2.Phase.WHITELIST_ONLY));
+        assertEq(uint256(whitelist.currentPhase()), uint256(WhitelistV2.Phase.WHITELIST_ONLY));
 
         // Test phase advancement
         whitelist.advancePhase();
-        assertEq(uint(whitelist.currentPhase()), uint(WhitelistV2.Phase.LIMITED_POOL_TRADING));
+        assertEq(uint256(whitelist.currentPhase()), uint256(WhitelistV2.Phase.LIMITED_POOL_TRADING));
 
         whitelist.advancePhase();
-        assertEq(uint(whitelist.currentPhase()), uint(WhitelistV2.Phase.EXTENDED_POOL_TRADING));
+        assertEq(uint256(whitelist.currentPhase()), uint256(WhitelistV2.Phase.EXTENDED_POOL_TRADING));
 
         whitelist.advancePhase();
-        assertEq(uint(whitelist.currentPhase()), uint(WhitelistV2.Phase.PUBLIC));
+        assertEq(uint256(whitelist.currentPhase()), uint256(WhitelistV2.Phase.PUBLIC));
 
         // Test cannot advance past PUBLIC
         vm.expectRevert("Already in final phase");
@@ -248,7 +248,7 @@ contract WhitelistV2Test is Test {
 
         // Test setPhase
         whitelist.setPhase(WhitelistV2.Phase.WHITELIST_ONLY);
-        assertEq(uint(whitelist.currentPhase()), uint(WhitelistV2.Phase.WHITELIST_ONLY));
+        assertEq(uint256(whitelist.currentPhase()), uint256(WhitelistV2.Phase.WHITELIST_ONLY));
     }
 
     function testWhitelistUsersAndPools() public {
@@ -307,11 +307,8 @@ contract WhitelistV2Test is Test {
         // Test getting pool at index
         address poolAtIndex = whitelist.getWhitelistedPoolAtIndex(0);
         assertTrue(
-            poolAtIndex == pool1 ||
-                poolAtIndex == pool2 ||
-                poolAtIndex == address(uniswapPool) ||
-                poolAtIndex == address(swapRouter) ||
-                poolAtIndex == address(positionManager)
+            poolAtIndex == pool1 || poolAtIndex == pool2 || poolAtIndex == address(uniswapPool)
+                || poolAtIndex == address(swapRouter) || poolAtIndex == address(positionManager)
         );
     }
 
@@ -372,7 +369,7 @@ contract WhitelistV2Test is Test {
         vm.startPrank(user1);
 
         // Wrap ETH to get WETH for trading
-        (bool success, ) = WETH_ADDRESS.call{value: 1 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 1 ether}("");
         require(success, "Failed to get WETH");
 
         // Attempt to buy tokens with 0.9 ETH worth of WETH
@@ -394,7 +391,7 @@ contract WhitelistV2Test is Test {
 
         // Test: User cannot exceed the 1 ETH limit
         // Wrap more ETH
-        (success, ) = WETH_ADDRESS.call{value: 1 ether}("");
+        (success,) = WETH_ADDRESS.call{value: 1 ether}("");
         require(success, "Failed to get WETH");
 
         vm.expectRevert();
@@ -415,7 +412,7 @@ contract WhitelistV2Test is Test {
 
         // Test: Non-whitelisted user cannot trade with Uniswap
         vm.startPrank(nonWhitelistedUser);
-        (success, ) = WETH_ADDRESS.call{value: 1 ether}("");
+        (success,) = WETH_ADDRESS.call{value: 1 ether}("");
         require(success, "Failed to get WETH");
         weth.approve(address(swapRouter), 1 ether);
 
@@ -445,7 +442,7 @@ contract WhitelistV2Test is Test {
         weth.approve(address(swapRouter), type(uint256).max);
 
         // Wrap ETH to get WETH for trading
-        (bool success, ) = WETH_ADDRESS.call{value: 8 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 8 ether}("");
         require(success, "Failed to get WETH");
 
         // Test trading in multiple transactions to reach the limit
@@ -525,7 +522,7 @@ contract WhitelistV2Test is Test {
         // Prepare user for swapping
         vm.startPrank(user1);
 
-        (bool success, ) = WETH_ADDRESS.call{value: 8 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 8 ether}("");
         require(success, "Failed to get WETH");
 
         weth.approve(address(swapRouter), type(uint256).max);

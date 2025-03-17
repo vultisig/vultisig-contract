@@ -18,21 +18,21 @@ contract StakeTest is Test {
     function setUp() public {
         // Deploy tokens and stake contracts as owner
         vm.startPrank(owner);
-        
+
         // Create separate tokens for staking and rewards
         stakingToken = new MockERC1363(INITIAL_SUPPLY);
         rewardToken = new MockERC1363(INITIAL_SUPPLY);
-        
+
         // Deploy stake contract with different tokens for staking and rewards
         stake = new Stake(address(stakingToken), address(rewardToken));
-        
+
         // Transfer reward tokens to the stake contract
         rewardToken.transfer(address(stake), INITIAL_SUPPLY / 2);
-        
+
         // Transfer staking tokens to the user for testing
         stakingToken.transfer(user, USER_BALANCE);
         vm.stopPrank();
-        
+
         // Set approvals for the stake contract
         vm.prank(address(stake));
         rewardToken.approve(address(stake), type(uint256).max);
@@ -112,13 +112,13 @@ contract StakeTest is Test {
         (uint256 stakedAmount,) = stake.userInfo(user);
         assertEq(stakedAmount, 0);
         assertEq(stake.totalStaked(), 0);
-        
+
         // Staking token should be fully withdrawn from the contract
         assertEq(stakingToken.balanceOf(address(stake)), 0);
         // Get the actual reward token balance from contract
         uint256 rewardTokenBalance = rewardToken.balanceOf(address(stake));
         assertEq(rewardTokenBalance, 500000000000000000000000);
-        
+
         // User should get back their staking tokens
         assertEq(stakingToken.balanceOf(user), USER_BALANCE);
         // No reward tokens should be received when using different token for rewards
@@ -141,13 +141,13 @@ contract StakeTest is Test {
         (uint256 stakedAmount,) = stake.userInfo(user);
         assertEq(stakedAmount, depositAmount - withdrawAmount);
         assertEq(stake.totalStaked(), depositAmount - withdrawAmount);
-        
+
         // Staking token balance should be reduced by the withdrawal amount
         assertEq(stakingToken.balanceOf(address(stake)), depositAmount - withdrawAmount);
         // Get the actual reward token balance from contract
         uint256 rewardTokenBalance = rewardToken.balanceOf(address(stake));
         assertEq(rewardTokenBalance, 500000000000000000000000);
-        
+
         // User should get back their staking tokens proportionally
         assertEq(stakingToken.balanceOf(user), USER_BALANCE - depositAmount + withdrawAmount);
         // No reward tokens should be received when using different token for rewards
