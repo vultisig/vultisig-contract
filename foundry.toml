@@ -11,4 +11,4 @@ remappings = [
 ]
 
 [rpc_endpoints]
-mainnet = "https://mainnet.infura.io/v3/${VULTISIG_INFURA_KEY}"
+mainnet = "https://ethereum-rpc.publicnode.com"
