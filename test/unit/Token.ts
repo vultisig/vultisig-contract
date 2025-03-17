@@ -36,7 +36,7 @@ describe("Token", function () {
 
     it("Should burn token from owner", async function () {
       const { token, owner } = await loadFixture(deployTokenFixture);
-      const totalSupply = 10_000_000n * ethers.parseEther("1");
+      const totalSupply = 100_000_000n * ethers.parseEther("1");
       const burnSupply = totalSupply / 10n;
 
       expect(await token.balanceOf(owner.address)).to.eq(totalSupply);
@@ -64,8 +64,8 @@ describe("Token", function () {
 
       await token.mint(ethers.parseEther("1000"));
 
-      expect(await token.totalSupply()).to.eq(ethers.parseEther("10001000"));
-      expect(await token.balanceOf(owner)).to.eq(ethers.parseEther("10001000"));
+      expect(await token.totalSupply()).to.eq(ethers.parseEther("100001000"));
+      expect(await token.balanceOf(owner)).to.eq(ethers.parseEther("100001000"));
 
       await expect(token.connect(otherAccount).mint(ethers.parseEther("1000"))).to.be.revertedWith(
         "Ownable: caller is not the owner",

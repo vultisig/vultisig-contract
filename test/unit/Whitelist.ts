@@ -32,7 +32,8 @@ describe("Whitelist", function () {
     it("Should set max address cap, locked, isSelfWhitelistDisabled", async function () {
       const { whitelist } = await loadFixture(deployWhitelistFixture);
 
-      expect(await whitelist.maxAddressCap()).to.eq(ethers.parseEther("4"));
+      // 10,000 USDC with 6 decimals
+      expect(await whitelist.maxAddressCap()).to.eq(10_000_000_000n);
       expect(await whitelist.locked()).to.eq(true);
     });
   });
@@ -282,15 +283,20 @@ describe("Whitelist", function () {
       );
 
       // Now set back a reasonable cap and use the successful oracle
-      await whitelist.setMaxAddressCap(ethers.parseEther("4"));
+      await whitelist.setMaxAddressCap(10_000_000_000n); // 10,000 USDC with 6 decimals
       await whitelist.setOracle(mockOracleSuccess);
-      await whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 0);
-      expect(await whitelist.contributed(otherAccount)).to.eq(ethers.parseEther("1.5"));
+      
+      // Pass 1,000,000,000 tokens which will convert to 1,500,000,000 USDC with the oracle
+      await whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 1_000_000_000n);
+      expect(await whitelist.contributed(otherAccount)).to.eq(1_500_000_000n); // 1,500 USDC with 6 decimals
 
-      await whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 0);
-      expect(await whitelist.contributed(otherAccount)).to.eq(ethers.parseEther("3"));
+      // Pass another 1,000,000,000 tokens which will convert to another 1,500,000,000 USDC
+      await whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 1_000_000_000n);
+      expect(await whitelist.contributed(otherAccount)).to.eq(3_000_000_000n); // 3,000 USDC with 6 decimals
 
-      await expect(whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 0)).to.be.revertedWithCustomError(
+      // Try to add 5,000,000,000 more tokens which would convert to 7,500,000,000 USDC
+      // This would exceed the max cap of 10,000,000,000 (3,000,000,000 + 7,500,000,000 > 10,000,000,000)
+      await expect(whitelist.connect(mockContract).checkWhitelist(pool, otherAccount, 5_000_000_000n)).to.be.revertedWithCustomError(
         whitelist,
         "MaxAddressCapOverflow",
       );
