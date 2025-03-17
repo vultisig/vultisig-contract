@@ -113,7 +113,6 @@ contract TokenTest is Test {
 
     // Contracts under test
     Token public tokenA; // Token on chain A
-    Token public tokenB; // Token on chain B
     WhitelistV2 public whitelist;
 
     // Uniswap contracts
@@ -155,7 +154,7 @@ contract TokenTest is Test {
         // Create a fork of mainnet
         mainnetFork = vm.createSelectFork("mainnet");
 
-        owner = address(this);
+        owner = address(0x9999999999999999999999999999999999999999);
         user1 = address(0x1);
         user2 = address(0x2);
         nonWhitelistedUser = address(0x3);
@@ -197,7 +196,7 @@ contract TokenTest is Test {
         uniswapPool = IUniswapV3Pool(poolAddress);
 
         // Fund this address with ETH, WETH, and USDC for testing
-        vm.deal(owner, 100 ether);
+        vm.deal(owner, 100000 ether);
 
         // We need to get some WETH and USDC for our tests
         // For WETH, we can deposit ETH
@@ -205,8 +204,10 @@ contract TokenTest is Test {
         address usdcWhale = 0x37305B1cD40574E4C5Ce33f8e8306Be057fD7341; // A known address with USDC
 
         // Get WETH by wrapping ETH
-        (bool success, ) = WETH_ADDRESS.call{value: 10 ether}("");
+        vm.startPrank(owner);
+        (bool success, ) = WETH_ADDRESS.call{value: 10000 ether}("");
         require(success, "Failed to get WETH");
+        vm.stopPrank();
 
         // Get USDC by impersonating a whale
         vm.startPrank(usdcWhale);
@@ -234,7 +235,8 @@ contract TokenTest is Test {
 
         // Deploy tokens on both chains with real whitelist
         tokenA = new Token("Test Token", "TEST");
-        tokenB = new Token("Test Token", "TEST");
+
+        tokenA.setWhitelist(address(whitelist));
 
         // Deploy mock receiver and spender
         mockReceiver = new MockERC1363Receiver();
@@ -273,6 +275,12 @@ contract TokenTest is Test {
         uint160 sqrtPriceX96 = uint160(79232123187620800136);
         tokenAPool.initialize(sqrtPriceX96);
 
+        // Get WETH balance of owner
+        uint256 wethBalance = weth.balanceOf(owner);
+        console2.log("WETH balance of owner:", wethBalance);
+        uint256 tokenABalance = tokenA.balanceOf(owner);
+        console2.log("TokenA balance of owner:", tokenABalance);
+
         // Add liquidity using position manager
         INonfungiblePositionManager.MintParams memory params = INonfungiblePositionManager.MintParams({
             token0: token0,
@@ -284,7 +292,7 @@ contract TokenTest is Test {
             amount1Desired: token0 == tokenAAddress ? wethAmount : tokenAAmount,
             amount0Min: 0,
             amount1Min: 0,
-            recipient: address(this),
+            recipient: owner,
             deadline: block.timestamp + 3600
         });
 
@@ -305,7 +313,7 @@ contract TokenTest is Test {
 
     // ==================== Basic ERC20 Tests ====================
 
-    function testInitialSupply() public {
+    function testInitialSupply() public view {
         assertEq(tokenA.totalSupply(), INITIAL_SUPPLY);
         // Note: We've transferred tokens to other addresses, the owner now holds less
     }
@@ -523,16 +531,17 @@ contract TokenTest is Test {
 
     function testWhitelistPhase0Restrictions() public {
         // Set whitelist phase
-        vm.prank(owner);
+        vm.startPrank(owner);
         whitelist.setPhase(WhitelistV2.Phase.WHITELIST_ONLY);
 
         // Test: Whitelisted user can send to another whitelisted user
-        vm.prank(owner);
         bool success = tokenA.transfer(user1, 100 ether);
         assertTrue(success);
 
+        assertFalse(whitelist.isUserWhitelisted(nonWhitelistedUser));
+        assertFalse(whitelist.isPoolWhitelisted(nonWhitelistedUser));
+
         // Test: Whitelisted user cannot send to non-whitelisted user
-        vm.prank(owner);
         vm.expectRevert("Transaction not allowed by whitelist");
         tokenA.transfer(nonWhitelistedUser, 100 ether);
     }

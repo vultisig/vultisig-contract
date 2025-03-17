@@ -268,7 +268,7 @@ contract WhitelistV2 is Ownable {
             return true;
         }
 
-        // // Check if sender is whitelisted
+        // Check if sender is whitelisted
         // if (!isUserWhitelisted(from)) {
         //     return false;
         // }
