@@ -34,6 +34,7 @@ contract WhitelistV2 is Ownable {
         LIMITED_POOL_TRADING, // Phase 1: Whitelisted users can trade with pools up to 1 ETH
         EXTENDED_POOL_TRADING, // Phase 2: Whitelisted users can trade with pools up to 4 ETH
         PUBLIC // Phase 3: No restrictions
+    
     }
 
     // Current launch phase
@@ -334,8 +335,8 @@ contract WhitelistV2 is Ownable {
                 amountIn: tokenAmount,
                 fee: fee,
                 sqrtPriceLimitX96: 0
-            }) 
-        )returns (
+            })
+        ) returns (
             uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
         ) {
             return amountReceived;
