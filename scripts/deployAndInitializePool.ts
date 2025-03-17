@@ -15,7 +15,7 @@ async function main() {
   // const Whitelist = await ethers.getContractFactory("Whitelist");
 
   // Initial supply for ETH mainnet should be 90m
-  // const token = await TokenWhitelisted.deploy("TKE", "Token-ETH", ethers.ZeroAddress);
+  // const token = await TokenWhitelisted.deploy("TKE", "Token-ETH");
   // await token.waitForDeployment();
 
   // const whitelist = await Whitelist.deploy();

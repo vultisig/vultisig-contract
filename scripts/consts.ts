@@ -15,7 +15,4 @@ export const USDC = {
   mainnet: "0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
 };
 
-export const LZ = {
-  sepolia: "",
-  mainnet: "0x66A71Dcef29A0fFBDBE3c6a460a3B5BC225Cd675",
-};
+

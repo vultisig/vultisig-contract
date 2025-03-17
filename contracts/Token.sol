@@ -1,25 +1,22 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import {OFT} from "@layerzerolabs/solidity-examples/contracts/token/oft/v1/OFT.sol";
-import {OFTCore, IOFTCore} from "@layerzerolabs/solidity-examples/contracts/token/oft/v1/OFTCore.sol";
+import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
 
 /**
- * @title OFT standard with Burnable and ERC1363 standard functions like approveAndCall, transferAndCall
+ * @title Token with ERC1363 standard functions like approveAndCall, transferAndCall
  */
-contract Token is OFT, IERC1363 {
+contract Token is ERC20, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
-    bool public bridgeLocked;
 
-    error BridgeLocked();
-
-    constructor(string memory name_, string memory ticker_, address _lzEndpoint) OFT(name_, ticker_, _lzEndpoint) {
-        _mint(_msgSender(), 10_000_000 * 1e18);
+    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable() {
+        _mint(_msgSender(), 100_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
     }
@@ -31,10 +28,6 @@ contract Token is OFT, IERC1363 {
     function setNameAndTicker(string calldata name_, string calldata ticker_) external onlyOwner {
         _name = name_;
         _ticker = ticker_;
-    }
-
-    function setBridgeLocked(bool newFlag) external onlyOwner {
-        bridgeLocked = newFlag;
     }
 
     /**
@@ -53,28 +46,12 @@ contract Token is OFT, IERC1363 {
         _burn(account, amount);
     }
 
-    function name() public view override returns (string memory) {
+    function name() public view override(ERC20) returns (string memory) {
         return _name;
     }
 
-    function symbol() public view override returns (string memory) {
+    function symbol() public view override(ERC20) returns (string memory) {
         return _ticker;
-    }
-
-    function sendFrom(
-        address _from,
-        uint16 _dstChainId,
-        bytes calldata _toAddress,
-        uint _amount,
-        address payable _refundAddress,
-        address _zroPaymentAddress,
-        bytes calldata _adapterParams
-    ) public payable override(IOFTCore, OFTCore) {
-        if (bridgeLocked) {
-            revert BridgeLocked();
-        }
-
-        super.sendFrom(_from, _dstChainId, _toAddress, _amount, _refundAddress, _zroPaymentAddress, _adapterParams);
     }
 
     /**

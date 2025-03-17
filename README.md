@@ -31,8 +31,38 @@ constructor() public
 
 ## VultisigWhitelisted contract
 
-During whitelist period, `_beforeTokenTransfer` function will call `checkWhitelist` function of whitelist contract
-If whitelist period is ended, owner will set whitelist contract address back to address(0) and tokens will be transferred freely
+During whitelist period, `_beforeTokenTransfer` function will call `checkWhitelist` function of whitelist contract.
+If whitelist period is ended, owner will set whitelist contract address back to address(0) and tokens will be transferred freely.
+
+
+`locked` means nobody can transfer tokens except owner, or SenderWL
+
+`SenderWL` is a list of addresses that can send (investors)
+`ReceiverWL` is a list of addresses that can receive (Launch Whitelist)
+
+
+### Phase 0 - Start
+`locked = true`
+
+In this phase, tokens can be distributed by owner and the SenderWL can send anywhere. 
+Owner sends tokens to investors. They are all put on SenderWL and can add to Uniswap or distribute further. Uniswap is not on SenderWL, so nobody can withdraw from Uniswap. 
+
+* Owner can send to Any (distribute tokens)
+* SenderWL can send to Any (transfer to anyone, or add liquidity to Uniswap)
+* Uniswap cannot send to Any
+
+### Phase 1 - Launch
+`locked = false`
+
+In this phase, only Uniswap can send to ReceiverWL. 
+After start period, owner will set SenderWL to 0. Then add the ReceiverWL, Uniswap pool and oracle. Nobody can do anything. AddressCap = 0. 
+Owner then unlocks, and set addressCap = 1000. Anyone on ReceiverWL can buy tokens up to addressCap. After 1 hour, set addressCap 10k. 
+* Uniswap can send to ReceiverWL
+
+### Phase 2 - End
+
+In this phase, tokens will be transferred freely.
+Owner sets whitelist contract to address(0)after 24hrs to let anyone do anything. 
 
 ### constructor
 

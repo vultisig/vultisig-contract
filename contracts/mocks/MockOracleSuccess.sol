@@ -2,12 +2,21 @@
 pragma solidity ^0.8.24;
 
 import {IOracle} from "../interfaces/IOracle.sol";
+import "hardhat/console.sol";
 
 contract MockOracleSuccess is IOracle {
-    function name() external view returns (string memory) {
-        return "TK/ETH Univ3TWAP";
+    function name() external pure returns (string memory) {
+        return "TK/USDC Univ3TWAP";
     }
-    function peek(uint256 baseAmount) external view returns (uint256) {
-        return 1.5 ether;
+    
+    // This is a simplified conversion for testing
+    // In a real implementation, this would query a price oracle
+    function peek(uint256 baseAmount) external pure returns (uint256) {
+        // For testing, we're using a fixed rate of 1.5 USDC per token
+        // For simplicity, we'll make a direct conversion regardless of decimals
+        // This makes testing easier as we can use smaller numbers
+        
+        // Simple formula: 1.5 USDC per token (multiply by 3/2)
+        return baseAmount * 3 / 2;
     }
 }

@@ -13,7 +13,7 @@ contract TokenWhitelisted is Token {
     /// @notice whitelist contract address
     address private _whitelistContract;
 
-    constructor(string memory name_, string memory ticker_, address _lzEndpoint) Token(name_, ticker_, _lzEndpoint) {}
+    constructor(string memory name_, string memory ticker_) Token(name_, ticker_) {}
 
     /// @notice Returns current whitelist contract address
     function whitelistContract() external view returns (address) {
@@ -22,7 +22,10 @@ contract TokenWhitelisted is Token {
 
     /// @notice Ownable function to set new whitelist contract address
     function setWhitelistContract(address newWhitelistContract) external onlyOwner {
-        _whitelistContract = newWhitelistContract;
+        // Only allow disabling whitelist contract once (whitelist cannot be re-enabled)
+        if (_whitelistContract != address(0)) {
+            _whitelistContract = newWhitelistContract;
+        }
     }
 
     /// @notice Before token transfer hook
