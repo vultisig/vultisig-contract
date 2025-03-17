@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {Token} from "../contracts/Token.sol";
@@ -33,9 +33,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(MintParams calldata params)
-        external
-        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(
+        MintParams calldata params
+    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 // Uniswap V3 Router Interface
@@ -64,10 +64,12 @@ contract MockERC1363Receiver is IERC1363Receiver {
         shouldReturnWrongSelector = _shouldReturnWrongSelector;
     }
 
-    function onTransferReceived(address operator, address from, uint256 value, bytes calldata data)
-        external
-        returns (bytes4)
-    {
+    function onTransferReceived(
+        address operator,
+        address from,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bytes4) {
         if (shouldRevert) {
             revert("MockERC1363Receiver: revert");
         }
@@ -199,7 +201,7 @@ contract TokenTest is Test {
 
         // Get WETH by wrapping ETH
         vm.startPrank(owner);
-        (bool success,) = WETH_ADDRESS.call{value: 10000 ether}("");
+        (bool success, ) = WETH_ADDRESS.call{value: 10000 ether}("");
         require(success, "Failed to get WETH");
         vm.stopPrank();
 
