@@ -328,15 +328,15 @@ contract WhitelistV2 is Ownable {
         (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
 
         try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
-                IQuoter.QuoteExactInputSingleParams({
-                    tokenIn: tokenIn,
-                    tokenOut: tokenOut,
-                    amountIn: tokenAmount,
-                    fee: fee,
-                    sqrtPriceLimitX96: 0
-                })
-            ) returns (
-                uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
+            IQuoter.QuoteExactInputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                amountIn: tokenAmount,
+                fee: fee,
+                sqrtPriceLimitX96: 0
+            }) 
+        )returns (
+            uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
         ) {
             return amountReceived;
         } catch {
