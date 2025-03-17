@@ -646,17 +646,10 @@ contract WhitelistV2Test is Test {
         vm.stopPrank();
     }
 
-    // function testRealTimeOraclePrices() public {
-    //     // Test that the contract can get accurate ETH values from the pool
-
-    //     // Set up a price that we expect to be close to what we've initialized in the pool
-    //     uint256 tokenAmount = 10000 ether;
-
-    //     // Get ETH value for tokens using the oracle
-    //     uint256 ethValue = whitelist.getEthValueForToken(tokenAmount);
-
-    //     // At our initialized price of 1 token = 0.0001 ETH, 10000 tokens should be ~1 ETH
-    //     // However, due to price impact and other factors, we check it's in a reasonable range
-    //     assertTrue(ethValue > 0.8 ether && ethValue < 1.2 ether, "ETH value not in expected range");
-    // }
+    function testPhaseLimitsUpdate() public {
+        // Test that phase limits can be updated
+        whitelist.setPhaseLimits(10 ether, 40 ether);
+        assertEq(whitelist.phase1EthLimit(), 10 ether);
+        assertEq(whitelist.phase2EthLimit(), 40 ether);
+    }
 }

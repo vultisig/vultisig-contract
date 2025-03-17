@@ -52,8 +52,8 @@ contract WhitelistV2 is Ownable {
     mapping(address => uint256) public userEthSpent;
 
     // Purchase limits by phase
-    uint256 public constant PHASE1_ETH_LIMIT = 1 ether;
-    uint256 public constant PHASE2_ETH_LIMIT = 4 ether;
+    uint256 public phase1EthLimit = 1 ether;
+    uint256 public phase2EthLimit = 4 ether;
 
     // Add this state variable
     address public constant UNISWAP_QUOTER = 0x5e55C9e631FAE526cd4B0526C4818D6e0a9eF0e3;
@@ -67,13 +67,28 @@ contract WhitelistV2 is Ownable {
     event PoolRemovedFromWhitelist(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
     event EthSpent(address indexed user, uint256 amount);
-
+    event PhaseLimitsUpdated(
+        uint256 oldPhase1EthLimit,
+        uint256 oldPhase2EthLimit,
+        uint256 newPhase1EthLimit,
+        uint256 newPhase2EthLimit
+    );
     /**
      * @dev Constructor
      * @param initialOwner Address of the contract owner
      */
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.WHITELIST_ONLY;
+        emit PhaseAdvanced(currentPhase);
+        emit PhaseLimitsUpdated(0, 0, phase1EthLimit, phase2EthLimit);
+    }
+
+    function setPhaseLimits(uint256 phase1EthLimit_, uint256 phase2EthLimit_) external onlyOwner {
+        uint256 oldPhase1EthLimit = phase1EthLimit;
+        uint256 oldPhase2EthLimit = phase2EthLimit;
+        phase1EthLimit = phase1EthLimit_;
+        phase2EthLimit = phase2EthLimit_;
+        emit PhaseLimitsUpdated(oldPhase1EthLimit, oldPhase2EthLimit, phase1EthLimit_, phase2EthLimit_);
     }
 
     // ==================== Phase Management ====================
@@ -279,7 +294,7 @@ contract WhitelistV2 is Ownable {
             // If recipient is a whitelisted pool, check ETH spending limits
             if (isPoolWhitelisted(from)) {
                 uint256 ethValue = getEthValueForToken(amount);
-                uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? PHASE1_ETH_LIMIT : PHASE2_ETH_LIMIT;
+                uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1EthLimit : phase2EthLimit;
 
                 if (userEthSpent[from] + ethValue <= limit) {
                     // Update user's ETH spent if the transaction is going through
