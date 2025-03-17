@@ -237,9 +237,8 @@ contract Whitelist is Ownable {
             // Owner check already handled above
             // Check if sender is on the sender whitelist
             if (
-                _allowedSenderWhitelistIndex == 0 ||
-                _senderWhitelistIndex[from] == 0 ||
-                _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
+                _allowedSenderWhitelistIndex == 0 || _senderWhitelistIndex[from] == 0
+                    || _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
             ) {
                 revert Locked();
             }
@@ -254,9 +253,8 @@ contract Whitelist is Ownable {
         if (from == _pool) {
             // Check if receiver is on the receiver whitelist
             if (
-                _allowedReceiverWhitelistIndex == 0 ||
-                _receiverWhitelistIndex[to] == 0 ||
-                _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
+                _allowedReceiverWhitelistIndex == 0 || _receiverWhitelistIndex[to] == 0
+                    || _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
             ) {
                 revert ReceiverNotWhitelisted();
             }
@@ -274,18 +272,16 @@ contract Whitelist is Ownable {
         // For non-pool transactions, check both sender and receiver whitelists
         // Check if sender is on the sender whitelist
         if (
-            _allowedSenderWhitelistIndex == 0 ||
-            _senderWhitelistIndex[from] == 0 ||
-            _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
+            _allowedSenderWhitelistIndex == 0 || _senderWhitelistIndex[from] == 0
+                || _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
         ) {
             revert SenderNotWhitelisted();
         }
 
         // Check if receiver is on the receiver whitelist
         if (
-            _allowedReceiverWhitelistIndex == 0 ||
-            _receiverWhitelistIndex[to] == 0 ||
-            _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
+            _allowedReceiverWhitelistIndex == 0 || _receiverWhitelistIndex[to] == 0
+                || _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
         ) {
             revert ReceiverNotWhitelisted();
         }

@@ -37,7 +37,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     struct UserInfo {
         uint256 amount; // How many tokens the user has staked
         uint256 rewardDebt; // Reward debt as per Masterchef logic
-        // rewards = user.amount * accRewardPerShare - user.rewardDebt
+            // rewards = user.amount * accRewardPerShare - user.rewardDebt
     }
 
     /// @notice Mapping of user address to their staking info
@@ -280,11 +280,11 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param value The amount of tokens to be spent
      * @return bytes4 The function selector to confirm the transaction is accepted
      */
-    function onApprovalReceived(
-        address owner,
-        uint256 value,
-        bytes calldata /* data */
-    ) external override returns (bytes4) {
+    function onApprovalReceived(address owner, uint256 value, bytes calldata /* data */ )
+        external
+        override
+        returns (bytes4)
+    {
         require(msg.sender == address(stakingToken), "Stake: caller is not the staking token");
         require(value > 0, "Stake: amount must be greater than 0");
 
