@@ -7,7 +7,7 @@ import "../contracts/Token.sol";
 import {IUniswapV3Pool} from "../contracts/interfaces/IUniswapV3Pool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
+import {Test} from "forge-std/Test.sol";
 
 // Uniswap V3 Factory Interface
 interface IUniswapV3Factory {
@@ -52,7 +52,7 @@ interface ISwapRouter {
     function exactInputSingle(ExactInputSingleParams calldata params) external payable returns (uint256 amountOut);
 }
 
-contract WhitelistV2Test is TestHelperOz5 {
+contract WhitelistV2Test is Test {
     using SafeERC20 for IERC20;
 
     // The fork
@@ -70,9 +70,6 @@ contract WhitelistV2Test is TestHelperOz5 {
 
     // Tokens for Uniswap pool
     IERC20 public weth;
-
-    uint16 aEid = 1;
-    uint16 bEid = 2;
 
     // Test addresses
     address public owner;
@@ -94,7 +91,7 @@ contract WhitelistV2Test is TestHelperOz5 {
     // Fee tier for pool (0.3%)
     uint24 constant FEE_TIER = 3000;
 
-    function setUp() public override {
+    function setUp() public {
         // Create a fork of mainnet
         mainnetFork = vm.createSelectFork("mainnet");
 
@@ -107,8 +104,6 @@ contract WhitelistV2Test is TestHelperOz5 {
         pool1 = address(0x500);
         pool2 = address(0x600);
         nonWhitelistedPool = address(0x700);
-
-        setUpEndpoints(2, LibraryType.UltraLightNode);
 
         // Get Uniswap V3 contracts from mainnet
         uniswapFactory = IUniswapV3Factory(UNISWAP_V3_FACTORY);
@@ -133,7 +128,7 @@ contract WhitelistV2Test is TestHelperOz5 {
         whitelist = new WhitelistV2(owner);
 
         // Deploy a test token that uses the whitelist
-        token = new Token("Test Token", "TEST", getEndpoint(aEid), owner, address(whitelist));
+        token = new Token("Test Token", "TEST");
 
         // Create a new Uniswap pool for our token and WETH
         uint256 tokenAmount = 1000000 * 10 ** 18; // 1M tokens
@@ -617,7 +612,7 @@ contract WhitelistV2Test is TestHelperOz5 {
         WhitelistV2 newWhitelist = new WhitelistV2(owner);
 
         // Create token using the new whitelist
-        Token newToken = new Token("New Test Token", "NTEST", address(0), owner, address(newWhitelist));
+        Token newToken = new Token("New Test Token", "NTEST");
 
         // Try to check transaction with no oracle set
         newWhitelist.setPhase(WhitelistV2.Phase.LIMITED_POOL_TRADING);
@@ -658,9 +653,4 @@ contract WhitelistV2Test is TestHelperOz5 {
     //     // However, due to price impact and other factors, we check it's in a reasonable range
     //     assertTrue(ethValue > 0.8 ether && ethValue < 1.2 ether, "ETH value not in expected range");
     // }
-
-    // ==================== Helper Functions ====================
-    function getEndpoint(uint16 eid) internal view returns (address) {
-        return address(endpoints[eid]);
-    }
 }

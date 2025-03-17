@@ -6,12 +6,11 @@ import {Token} from "../contracts/Token.sol";
 import {WhitelistV2} from "../contracts/WhitelistV2.sol";
 import {IERC1363Receiver} from "../contracts/interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "../contracts/interfaces/IERC1363Spender.sol";
-import {SendParam, MessagingFee, MessagingReceipt, OFTReceipt} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
-import {OptionsBuilder} from "@layerzerolabs/oapp-evm/contracts/oapp/libs/OptionsBuilder.sol";
-import {TestHelperOz5} from "@layerzerolabs/test-devtools-evm-foundry/contracts/TestHelperOz5.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {IUniswapV3Pool} from "../contracts/interfaces/IUniswapV3Pool.sol";
+import {Test} from "forge-std/Test.sol";
+
 // Uniswap V3 Factory Interface
 interface IUniswapV3Factory {
     function getPool(address tokenA, address tokenB, uint24 fee) external view returns (address pool);
@@ -106,8 +105,7 @@ contract MockERC1363Spender is IERC1363Spender {
     }
 }
 
-contract TokenTest is TestHelperOz5 {
-    using OptionsBuilder for bytes;
+contract TokenTest is Test {
     using SafeERC20 for IERC20;
 
     // The fork
@@ -141,11 +139,7 @@ contract TokenTest is TestHelperOz5 {
     address public pool2;
     address public nonWhitelistedPool;
 
-    // Define chain EIDs
-    uint16 aEid = 1;
-    uint16 bEid = 2;
-
-    uint256 public constant INITIAL_SUPPLY = 10_000_000 * 1e18;
+    uint256 public constant INITIAL_SUPPLY = 100_000_000 * 1e18;
 
     // Addresses on Ethereum mainnet
     address constant WETH_ADDRESS = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
@@ -157,11 +151,9 @@ contract TokenTest is TestHelperOz5 {
     // Fee tier for pool (0.3%)
     uint24 constant FEE_TIER = 3000;
 
-    function setUp() public override {
+    function setUp() public {
         // Create a fork of mainnet
         mainnetFork = vm.createSelectFork("mainnet");
-
-        super.setUp();
 
         owner = address(this);
         user1 = address(0x1);
@@ -170,9 +162,6 @@ contract TokenTest is TestHelperOz5 {
         pool1 = address(0x4);
         pool2 = address(0x5);
         nonWhitelistedPool = address(0x6);
-
-        // Setup function to initialize 2 Mock Endpoints with Mock MessageLib
-        setUpEndpoints(2, LibraryType.UltraLightNode);
 
         // Get Uniswap V3 contracts from mainnet
         uniswapFactory = IUniswapV3Factory(UNISWAP_V3_FACTORY);
@@ -242,19 +231,10 @@ contract TokenTest is TestHelperOz5 {
         whitelist.whitelistPool(pool2);
         whitelist.whitelistPool(address(uniswapPool));
         whitelist.whitelistPool(address(swapRouter));
-        whitelist.whitelistPool(address(getEndpoint(aEid))); // Whitelist LZ endpoint for bridge tests
-        whitelist.whitelistPool(address(getEndpoint(bEid))); // Whitelist LZ endpoint for bridge tests
 
         // Deploy tokens on both chains with real whitelist
-        tokenA = new Token("Test Token", "TEST", getEndpoint(aEid), owner, address(whitelist));
-        tokenB = new Token("Test Token", "TEST", getEndpoint(bEid), owner, address(whitelist));
-
-        // Set each token as peer on the other chain
-        bytes32 peerA = addressToBytes32(address(tokenA));
-        bytes32 peerB = addressToBytes32(address(tokenB));
-
-        tokenA.setPeer(bEid, peerB);
-        tokenB.setPeer(aEid, peerA);
+        tokenA = new Token("Test Token", "TEST");
+        tokenB = new Token("Test Token", "TEST");
 
         // Deploy mock receiver and spender
         mockReceiver = new MockERC1363Receiver();
@@ -396,15 +376,6 @@ contract TokenTest is TestHelperOz5 {
         assertEq(tokenA.symbol(), newTicker);
     }
 
-    function testSetBridgeLocked() public {
-        assertEq(tokenA.bridgeLocked(), false);
-
-        vm.prank(owner);
-        tokenA.setBridgeLocked(true);
-
-        assertEq(tokenA.bridgeLocked(), true);
-    }
-
     // ==================== Burn Tests ====================
 
     function testBurn() public {
@@ -435,140 +406,6 @@ contract TokenTest is TestHelperOz5 {
         assertEq(tokenA.totalSupply(), initialSupply - amount);
         assertEq(tokenA.balanceOf(owner), preBurnBalance - amount);
         assertEq(tokenA.allowance(owner, user1), preBurnAllowance - amount);
-    }
-
-    // ==================== Bridge Tests ====================
-
-    function testSendBridgeLocked() public {
-        uint256 amount = 1000 * 1e18;
-
-        // Lock the bridge
-        vm.prank(owner);
-        tokenA.setBridgeLocked(true);
-
-        // Create SendParam struct
-        SendParam memory sendParam = SendParam({
-            dstEid: bEid, // destination chain id
-            to: bytes32(uint256(uint160(user1))), // convert address to bytes32
-            amountLD: amount,
-            minAmountLD: amount, // No slippage
-            extraOptions: "", // No extra options
-            composeMsg: "", // No compose message
-            oftCmd: "" // No OFT command
-        });
-
-        // Create MessagingFee struct
-        MessagingFee memory fee = MessagingFee({nativeFee: 0.1 ether, lzTokenFee: 0});
-
-        // Try to bridge tokens
-        vm.prank(owner);
-        vm.expectRevert(Token.BridgeLocked.selector);
-        tokenA.send{value: 0.1 ether}(
-            sendParam,
-            fee,
-            payable(owner) // refund address
-        );
-    }
-
-    function testSendSuccess() public {
-        uint256 amount = 1000 * 1e18;
-
-        // Generate options with sufficient gas for message execution
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-
-        // Create SendParam struct for the quoteSend call
-        SendParam memory sendParam = SendParam({
-            dstEid: bEid,
-            to: bytes32(uint256(uint160(user1))),
-            amountLD: amount,
-            minAmountLD: amount,
-            extraOptions: options,
-            composeMsg: "",
-            oftCmd: ""
-        });
-
-        // Get a quote for the bridging operation - use quoteSend instead of quote
-        MessagingFee memory fee = tokenA.quoteSend(sendParam, false); // false = don't pay in LZ token
-
-        uint256 preSendBalance = tokenA.balanceOf(owner);
-        // Send tokens from tokenA
-        vm.prank(owner);
-        (MessagingReceipt memory receipt, OFTReceipt memory oftReceipt) = tokenA.send{value: fee.nativeFee}(
-            sendParam,
-            fee,
-            payable(owner)
-        );
-
-        // Assert the token was deducted from sender
-        assertEq(tokenA.balanceOf(owner), preSendBalance - amount);
-        assertEq(tokenB.balanceOf(user1), 0); // Not received yet
-
-        // Assert the OFT receipt shows correct amounts
-        assertEq(oftReceipt.amountSentLD, amount);
-        assertEq(oftReceipt.amountReceivedLD, amount);
-
-        // Verify there's a pending packet
-        assertTrue(hasPendingPackets(bEid, addressToBytes32(address(tokenB))));
-
-        // Deliver the packet to chainB
-        verifyPackets(bEid, addressToBytes32(address(tokenB)));
-
-        // Verify user1 received tokens on chainB
-        assertEq(tokenB.balanceOf(user1), amount);
-    }
-
-    // Add a helper test to check bidirectional bridging works
-    function testBidirectionalBridging() public {
-        uint256 amount = 1000 * 1e18;
-
-        // Generate options
-        bytes memory options = OptionsBuilder.newOptions().addExecutorLzReceiveOption(200000, 0);
-
-        // First, send from A to B
-        SendParam memory sendParamAtoB = SendParam({
-            dstEid: bEid,
-            to: bytes32(uint256(uint160(user1))),
-            amountLD: amount,
-            minAmountLD: amount,
-            extraOptions: options,
-            composeMsg: "",
-            oftCmd: ""
-        });
-
-        // Get quote for A to B
-        MessagingFee memory feeAtoB = tokenA.quoteSend(sendParamAtoB, false);
-
-        vm.prank(owner);
-        tokenA.send{value: feeAtoB.nativeFee}(sendParamAtoB, feeAtoB, payable(owner));
-
-        // Deliver the packet to chain B
-        verifyPackets(bEid, addressToBytes32(address(tokenB)));
-
-        // Verify user1 received tokens on chain B
-        assertEq(tokenB.balanceOf(user1), amount);
-
-        // Now send tokens back from B to A
-        SendParam memory sendParamBtoA = SendParam({
-            dstEid: aEid,
-            to: bytes32(uint256(uint160(user2))),
-            amountLD: amount / 2,
-            minAmountLD: amount / 2,
-            extraOptions: options,
-            composeMsg: "",
-            oftCmd: ""
-        });
-
-        // Get quote for B to A
-        MessagingFee memory feeBtoA = tokenB.quoteSend(sendParamBtoA, false);
-
-        vm.prank(user1);
-        tokenB.send{value: feeBtoA.nativeFee}(sendParamBtoA, feeBtoA, payable(user1));
-
-        // Deliver the packet to chain A
-        verifyPackets(aEid, addressToBytes32(address(tokenA)));
-
-        // Verify user2 received tokens on chain A
-        assertEq(tokenA.balanceOf(user2), amount / 2);
     }
 
     // ==================== ERC1363 Tests ====================
@@ -866,10 +703,5 @@ contract TokenTest is TestHelperOz5 {
         assertTrue(amountOut > 0, "Swap failed for non-whitelisted user in PUBLIC phase");
 
         vm.stopPrank();
-    }
-
-    // ==================== Helper Functions ====================
-    function getEndpoint(uint16 eid) internal view returns (address) {
-        return address(endpoints[eid]);
     }
 }

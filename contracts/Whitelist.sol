@@ -48,7 +48,7 @@ contract Whitelist is Ownable {
     mapping(address => uint256) private _contributed;
 
     /// @notice Set the default max address cap to 10,000 USDC (6 decimals) and lock token transfers initially
-    constructor() {
+    constructor() Ownable(_msgSender()) {
         _maxAddressCap = 10_000 * 10 ** 6; // 10,000 USDC with 6 decimals
         _locked = true; // Initially, liquidity will be locked
         _allowedSenderWhitelistIndex = 0;
