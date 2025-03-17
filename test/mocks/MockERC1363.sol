@@ -12,8 +12,8 @@ contract MockERC1363 is ERC20 {
     function approveAndCall(address spender, uint256 amount, bytes memory data) external returns (bool) {
         approve(spender, amount);
         require(
-            IERC1363Spender(spender).onApprovalReceived(msg.sender, amount, data) ==
-                IERC1363Spender.onApprovalReceived.selector,
+            IERC1363Spender(spender).onApprovalReceived(msg.sender, amount, data)
+                == IERC1363Spender.onApprovalReceived.selector,
             "ERC1363: spender rejected tokens"
         );
         return true;

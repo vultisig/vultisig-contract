@@ -1,6 +1,6 @@
 import { HardhatUserConfig, vars } from "hardhat/config";
 import "@nomicfoundation/hardhat-toolbox";
-import "@nomicfoundation/hardhat-foundry";
+import "@nomicfoundation/hardhat-foundry"; // Re-enabled foundry integration
 import "hardhat-erc1820"; // ERC777 is interacting with ERC1820 registry
 import * as dotenv from 'dotenv';  // Import dotenv for .env file support
 
@@ -9,7 +9,7 @@ dotenv.config();
 
 const config: HardhatUserConfig = {
   solidity: {
-    version: "0.8.24",
+    version: "0.8.20",
     settings: {
       optimizer: {
         enabled: true,

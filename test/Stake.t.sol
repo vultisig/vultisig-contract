@@ -7,7 +7,8 @@ import {MockERC1363} from "./mocks/MockERC1363.sol";
 
 contract StakeTest is Test {
     Stake public stake;
-    MockERC1363 public token;
+    MockERC1363 public stakingToken;
+    MockERC1363 public rewardToken;
 
     address public owner = makeAddr("owner");
     address public user = makeAddr("user");
@@ -15,35 +16,56 @@ contract StakeTest is Test {
     uint256 public constant USER_BALANCE = 1_000 ether;
 
     function setUp() public {
+        // Deploy tokens and stake contracts as owner
         vm.startPrank(owner);
-        token = new MockERC1363(INITIAL_SUPPLY);
-        stake = new Stake(address(token));
-        token.transfer(user, USER_BALANCE);
+
+        // Create separate tokens for staking and rewards
+        stakingToken = new MockERC1363(INITIAL_SUPPLY);
+        rewardToken = new MockERC1363(INITIAL_SUPPLY);
+
+        // Deploy stake contract with different tokens for staking and rewards
+        stake = new Stake(address(stakingToken), address(rewardToken));
+
+        // Transfer reward tokens to the stake contract
+        rewardToken.transfer(address(stake), INITIAL_SUPPLY / 2);
+
+        // Transfer staking tokens to the user for testing
+        stakingToken.transfer(user, USER_BALANCE);
         vm.stopPrank();
+
+        // Set approvals for the stake contract
+        vm.prank(address(stake));
+        rewardToken.approve(address(stake), type(uint256).max);
     }
 
     function test_Deployment() public {
-        assertEq(address(stake.token()), address(token));
+        assertEq(address(stake.stakingToken()), address(stakingToken));
+        assertEq(address(stake.rewardToken()), address(rewardToken));
     }
 
     function test_RevertDeploymentWithZeroAddress() public {
-        vm.expectRevert("Stake: token is the zero address");
-        new Stake(address(0));
+        vm.expectRevert("Stake: staking token is the zero address");
+        new Stake(address(0), address(rewardToken));
     }
 
     function test_Deposit() public {
         uint256 amount = 100 ether;
 
         vm.startPrank(user);
-        token.approve(address(stake), amount);
+        stakingToken.approve(address(stake), amount);
 
         vm.expectEmit(true, false, false, true);
         emit Stake.Deposited(user, amount);
         stake.deposit(amount);
 
-        assertEq(stake.balanceOf(user), amount);
+        // userInfo returns a tuple where the first element is the amount
+        (uint256 stakedAmount,) = stake.userInfo(user);
+        assertEq(stakedAmount, amount);
         assertEq(stake.totalStaked(), amount);
-        assertEq(token.balanceOf(address(stake)), amount);
+        // Only staking tokens should be transferred to the contract
+        assertEq(stakingToken.balanceOf(address(stake)), amount);
+        // Reward token balance should remain unchanged
+        assertEq(rewardToken.balanceOf(address(stake)), INITIAL_SUPPLY / 2);
         vm.stopPrank();
     }
 
@@ -53,11 +75,16 @@ contract StakeTest is Test {
         vm.startPrank(user);
         vm.expectEmit(true, false, false, true);
         emit Stake.Deposited(user, amount);
-        token.approveAndCall(address(stake), amount, "");
+        stakingToken.approveAndCall(address(stake), amount, "");
 
-        assertEq(stake.balanceOf(user), amount);
+        // userInfo returns a tuple where the first element is the amount
+        (uint256 stakedAmount,) = stake.userInfo(user);
+        assertEq(stakedAmount, amount);
         assertEq(stake.totalStaked(), amount);
-        assertEq(token.balanceOf(address(stake)), amount);
+        // Only staking tokens should be transferred to the contract
+        assertEq(stakingToken.balanceOf(address(stake)), amount);
+        // Reward token balance should remain unchanged
+        assertEq(rewardToken.balanceOf(address(stake)), INITIAL_SUPPLY / 2);
         vm.stopPrank();
     }
 
@@ -73,7 +100,7 @@ contract StakeTest is Test {
 
         // First deposit
         vm.startPrank(user);
-        token.approve(address(stake), depositAmount);
+        stakingToken.approve(address(stake), depositAmount);
         stake.deposit(depositAmount);
 
         // Then withdraw
@@ -81,10 +108,22 @@ contract StakeTest is Test {
         emit Stake.Withdrawn(user, depositAmount);
         stake.withdraw(depositAmount);
 
-        assertEq(stake.balanceOf(user), 0);
+        // userInfo returns a tuple where the first element is the amount
+        (uint256 stakedAmount,) = stake.userInfo(user);
+        assertEq(stakedAmount, 0);
         assertEq(stake.totalStaked(), 0);
-        assertEq(token.balanceOf(address(stake)), 0);
-        assertEq(token.balanceOf(user), USER_BALANCE);
+
+        // Staking token should be fully withdrawn from the contract
+        assertEq(stakingToken.balanceOf(address(stake)), 0);
+        // Get the actual reward token balance from contract
+        uint256 rewardTokenBalance = rewardToken.balanceOf(address(stake));
+        assertEq(rewardTokenBalance, 500000000000000000000000);
+
+        // User should get back their staking tokens
+        assertEq(stakingToken.balanceOf(user), USER_BALANCE);
+        // No reward tokens should be received when using different token for rewards
+        // This is because in our test environment, no rewards are actually accumulated
+        assertEq(rewardToken.balanceOf(user), 0);
         vm.stopPrank();
     }
 
@@ -93,14 +132,27 @@ contract StakeTest is Test {
         uint256 withdrawAmount = 60 ether;
 
         vm.startPrank(user);
-        token.approve(address(stake), depositAmount);
+        stakingToken.approve(address(stake), depositAmount);
         stake.deposit(depositAmount);
 
         stake.withdraw(withdrawAmount);
 
-        assertEq(stake.balanceOf(user), depositAmount - withdrawAmount);
+        // userInfo returns a tuple where the first element is the amount
+        (uint256 stakedAmount,) = stake.userInfo(user);
+        assertEq(stakedAmount, depositAmount - withdrawAmount);
         assertEq(stake.totalStaked(), depositAmount - withdrawAmount);
-        assertEq(token.balanceOf(address(stake)), depositAmount - withdrawAmount);
+
+        // Staking token balance should be reduced by the withdrawal amount
+        assertEq(stakingToken.balanceOf(address(stake)), depositAmount - withdrawAmount);
+        // Get the actual reward token balance from contract
+        uint256 rewardTokenBalance = rewardToken.balanceOf(address(stake));
+        assertEq(rewardTokenBalance, 500000000000000000000000);
+
+        // User should get back their staking tokens proportionally
+        assertEq(stakingToken.balanceOf(user), USER_BALANCE - depositAmount + withdrawAmount);
+        // No reward tokens should be received when using different token for rewards
+        // This is because in our test environment, no rewards are actually accumulated
+        assertEq(rewardToken.balanceOf(user), 0);
         vm.stopPrank();
     }
 
@@ -109,7 +161,7 @@ contract StakeTest is Test {
         uint256 withdrawAmount = 101 ether;
 
         vm.startPrank(user);
-        token.approve(address(stake), depositAmount);
+        stakingToken.approve(address(stake), depositAmount);
         stake.deposit(depositAmount);
 
         vm.expectRevert("Stake: insufficient balance");
@@ -126,7 +178,7 @@ contract StakeTest is Test {
 
     function test_RevertOnApprovalReceivedNotToken() public {
         vm.startPrank(user);
-        vm.expectRevert("Stake: caller is not the token");
+        vm.expectRevert("Stake: caller is not the staking token");
         stake.onApprovalReceived(user, 100 ether, "");
         vm.stopPrank();
     }

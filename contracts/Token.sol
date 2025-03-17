@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -84,12 +84,11 @@ contract Token is ERC20, Ownable, IERC1363 {
     /**
      * @inheritdoc IERC1363
      */
-    function transferFromAndCall(
-        address from,
-        address to,
-        uint256 value,
-        bytes memory data
-    ) public virtual returns (bool) {
+    function transferFromAndCall(address from, address to, uint256 value, bytes memory data)
+        public
+        virtual
+        returns (bool)
+    {
         if (!transferFrom(from, to, value)) {
             revert ERC1363TransferFromFailed(from, to, value);
         }

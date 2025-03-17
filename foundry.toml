@@ -7,12 +7,8 @@ cache_path  = 'cache_forge'
 
 
 remappings = [
-    '@layerzerolabs/oft-evm/=lib/devtools/packages/oft-evm/',
-    '@layerzerolabs/oapp-evm/=lib/devtools/packages/oapp-evm/',
-    '@layerzerolabs/test-devtools-evm-foundry/=lib/devtools/packages/test-devtools-evm-foundry',
     '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/',
-    'solidity-bytes-utils/=lib/solidity-bytes-utils',
 ]
 
 [rpc_endpoints]
-mainnet = "https://eth-mainnet.g.alchemy.com/v2/${VULTISIG_ALCHEMY_KEY}"
+mainnet = "https://ethereum-rpc.publicnode.com"

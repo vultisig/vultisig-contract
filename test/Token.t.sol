@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
 import {TokenWhitelisted} from "../contracts/extensions/TokenWhitelisted.sol";
@@ -33,9 +33,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(
-        MintParams calldata params
-    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(MintParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 // Uniswap V3 Router Interface
@@ -64,12 +64,10 @@ contract MockERC1363Receiver is IERC1363Receiver {
         shouldReturnWrongSelector = _shouldReturnWrongSelector;
     }
 
-    function onTransferReceived(
-        address operator,
-        address from,
-        uint256 value,
-        bytes calldata data
-    ) external returns (bytes4) {
+    function onTransferReceived(address operator, address from, uint256 value, bytes calldata data)
+        external
+        returns (bytes4)
+    {
         if (shouldRevert) {
             revert("MockERC1363Receiver: revert");
         }
@@ -149,8 +147,36 @@ contract TokenWhitelistedTest is Test {
     uint24 constant FEE_TIER = 3000;
 
     function setUp() public {
-        // Create a fork of mainnet
-        mainnetFork = vm.createSelectFork("mainnet");
+        // Try to use Alchemy if available, otherwise fall back to Infura
+        string memory alchemyKey;
+        string memory infuraKey;
+
+        // Try to get Alchemy key
+        try vm.envString("VULTISIG_ALCHEMY_KEY") returns (string memory value) {
+            alchemyKey = value;
+        } catch {
+            alchemyKey = "";
+        }
+
+        // Try to get Infura key
+        try vm.envString("VULTISIG_INFURA_KEY") returns (string memory value) {
+            infuraKey = value;
+        } catch {
+            infuraKey = "";
+        }
+
+        if (bytes(alchemyKey).length > 0) {
+            // Use Alchemy if key is available
+            string memory alchemyUrl = string.concat("https://eth-mainnet.g.alchemy.com/v2/", alchemyKey);
+            mainnetFork = vm.createSelectFork(alchemyUrl);
+        } else if (bytes(infuraKey).length > 0) {
+            // Fall back to Infura if Alchemy key is not available
+            string memory infuraUrl = string.concat("https://mainnet.infura.io/v3/", infuraKey);
+            mainnetFork = vm.createSelectFork(infuraUrl);
+        } else {
+            // Fall back to using the RPC endpoint configured in foundry.toml
+            mainnetFork = vm.createSelectFork("mainnet");
+        }
 
         owner = address(0x9999999999999999999999999999999999999999);
         user1 = address(0x1);
@@ -173,7 +199,7 @@ contract TokenWhitelistedTest is Test {
 
         // Get WETH by wrapping ETH
         vm.startPrank(owner);
-        (bool success, ) = WETH_ADDRESS.call{value: 10000 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 10000 ether}("");
         require(success, "Failed to get WETH");
         vm.stopPrank();
 

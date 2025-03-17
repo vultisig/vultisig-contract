@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.28;
 
 import {Token} from "../Token.sol";
 import {IWhitelistV2} from "../interfaces/IWhitelistV2.sol";
