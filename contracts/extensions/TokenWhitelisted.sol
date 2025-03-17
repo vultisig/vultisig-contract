@@ -30,18 +30,18 @@ contract TokenWhitelisted is Token {
     /// @notice Ownable function to set new whitelist contract address
     function setWhitelistContract(address newWhitelistContract) external onlyOwner {
         // Allow setting the whitelist contract only if not revoked
-        if(!_whitelistRevoked){
+        if (!_whitelistRevoked) {
             _whitelistContract = newWhitelistContract;
         }
     }
-    
+
     /// @notice Before token transfer hook
     /// @dev It will call `checkWhitelist` function and if it's succsessful, it will transfer tokens, unless revert
-    function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {
+    function _update(address from, address to, uint256 amount) internal override {
         require(to != address(this), "Cannot transfer to the token contract address");
         if (_whitelistContract != address(0)) {
             IWhitelist(_whitelistContract).checkWhitelist(from, to, amount);
         }
-        super._beforeTokenTransfer(from, to, amount);
+        super._update(from, to, amount);
     }
 }

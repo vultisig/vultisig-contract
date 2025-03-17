@@ -7,6 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
+import {IWhitelistV2} from "./interfaces/IWhitelistV2.sol";
 
 /**
  * @title Token with ERC1363 standard functions like approveAndCall, transferAndCall
@@ -14,8 +15,13 @@ import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
 contract Token is ERC20, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
+    IWhitelistV2 public whitelist;
+    bool public whitelistRevoked = false;
 
-    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable() {
+    event WhitelistContractUpdated(address indexed whitelist);
+    error WhitelistRevoked();
+
+    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {
         _mint(_msgSender(), 100_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
@@ -24,7 +30,7 @@ contract Token is ERC20, Ownable, IERC1363 {
     function mint(uint256 amount) external onlyOwner {
         _mint(_msgSender(), amount);
     }
-    
+
     /**
      * @dev Burns a specific amount of tokens.
      * @param amount The amount of token to be burned.
@@ -37,8 +43,6 @@ contract Token is ERC20, Ownable, IERC1363 {
         _name = name_;
         _ticker = ticker_;
     }
-
-
 
     /**
      * @dev Destroys `amount` tokens from `account`, deducting from the caller's allowance.
@@ -175,5 +179,31 @@ contract Token is ERC20, Ownable, IERC1363 {
                 }
             }
         }
+    }
+
+    /**
+     * @dev Hook that is called before any transfer of tokens
+     * @param from Address sending tokens
+     * @param to Address receiving tokens
+     * @param amount Amount of tokens being transferred
+     */
+    function _update(address from, address to, uint256 amount) internal virtual override {
+        if (address(whitelist) != address(0)) {
+            require(whitelist.isTransactionAllowed(from, to, amount), "Transaction not allowed by whitelist");
+        }
+        super._update(from, to, amount);
+    }
+
+    function setWhitelist(address _whitelist) external onlyOwner {
+        if (whitelistRevoked) {
+            revert WhitelistRevoked();
+        }
+        whitelist = IWhitelistV2(_whitelist);
+    }
+
+    function disableWhitelist() external onlyOwner {
+        whitelist = IWhitelistV2(address(0));
+        whitelistRevoked = true;
+        emit WhitelistContractUpdated(address(0));
     }
 }

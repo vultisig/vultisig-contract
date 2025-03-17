@@ -64,7 +64,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
     }
-    
+
     /**
      * @dev Update reward variables with current token balances
      * Must be called before any deposit or withdrawal
@@ -91,7 +91,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             emit RewardsUpdated(accRewardPerShare, newRewards);
         }
     }
-    
+
     /**
      * @dev Returns pending rewards for a user
      * @param _user Address of the user
@@ -117,7 +117,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // pending = (user.amount * accRewardPerShare) - user.rewardDebt
         return (user.amount * newAccRewardPerShare) / 1e12 - user.rewardDebt;
     }
-    
+
     /**
      * @dev Allows a user to deposit tokens without using approveAndCall
      * User must approve tokens first
@@ -144,7 +144,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         
         emit Deposited(msg.sender, amount);
     }
-    
+
     /**
      * @dev Claims USDC rewards for the caller
      * @return Amount of rewards claimed
@@ -198,7 +198,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         
         emit Withdrawn(msg.sender, amount);
     }
-    
+
     /**
      * @dev Emergency withdraw without claiming rewards
      * @param amount Amount of tokens to withdraw
@@ -305,7 +305,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
         
         emit Deposited(owner, value);
-        
+
         // Return the function selector to confirm transaction was accepted
         return IERC1363Spender.onApprovalReceived.selector;
     }

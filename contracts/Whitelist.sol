@@ -48,8 +48,8 @@ contract Whitelist is Ownable {
     mapping(address => uint256) private _contributed;
 
     /// @notice Set the default max address cap to 10,000 USDC (6 decimals) and lock token transfers initially
-    constructor() {
-        _maxAddressCap = 10_000 * 10**6; // 10,000 USDC with 6 decimals
+    constructor() Ownable(_msgSender()) {
+        _maxAddressCap = 10_000 * 10 ** 6; // 10,000 USDC with 6 decimals
         _locked = true; // Initially, liquidity will be locked
         _allowedSenderWhitelistIndex = 0;
         _allowedReceiverWhitelistIndex = 0;
@@ -78,7 +78,7 @@ contract Whitelist is Ownable {
     function senderWhitelistIndex(address account) external view returns (uint256) {
         return _senderWhitelistIndex[account];
     }
-    
+
     /// @notice Returns the receiver whitelisted index. If not whitelisted, then it will be 0
     /// @param account The address to be checked
     function receiverWhitelistIndex(address account) external view returns (uint256) {
@@ -105,7 +105,7 @@ contract Whitelist is Ownable {
     function senderWhitelistCount() external view returns (uint256) {
         return _senderWhitelistCount;
     }
-    
+
     /// @notice Returns current receiver whitelisted address count
     function receiverWhitelistCount() external view returns (uint256) {
         return _receiverWhitelistCount;
@@ -115,7 +115,7 @@ contract Whitelist is Ownable {
     function allowedSenderWhitelistIndex() external view returns (uint256) {
         return _allowedSenderWhitelistIndex;
     }
-    
+
     /// @notice Returns current allowed receiver whitelist index
     function allowedReceiverWhitelistIndex() external view returns (uint256) {
         return _allowedReceiverWhitelistIndex;
@@ -174,7 +174,7 @@ contract Whitelist is Ownable {
     function setAllowedSenderWhitelistIndex(uint256 newIndex) external onlyOwner {
         _allowedSenderWhitelistIndex = newIndex;
     }
-    
+
     /// @notice Setter for allowed receiver whitelist index
     /// @param newIndex New index for allowed receiver whitelist
     function setAllowedReceiverWhitelistIndex(uint256 newIndex) external onlyOwner {
@@ -200,7 +200,7 @@ contract Whitelist is Ownable {
             _addSenderWhitelistedAddress(whitelisted[i]);
         }
     }
-    
+
     /// @notice Add batch receiver whitelists
     /// @param whitelisted Array of addresses to be added
     function addBatchReceiverWhitelist(address[] calldata whitelisted) external onlyOwner {
@@ -221,24 +221,24 @@ contract Whitelist is Ownable {
         if (from == owner() || to == owner()) {
             return;
         }
-        
+
         // Check if sender is blacklisted
         if (_isBlacklisted[from]) {
             revert Blacklisted();
         }
-        
+
         // Check if receiver is blacklisted
         if (_isBlacklisted[to]) {
             revert Blacklisted();
         }
-        
+
         // If locked, only owner or whitelisted senders can transfer
         if (_locked) {
             // Owner check already handled above
             // Check if sender is on the sender whitelist
             if (
-                _allowedSenderWhitelistIndex == 0 || 
-                _senderWhitelistIndex[from] == 0 || 
+                _allowedSenderWhitelistIndex == 0 ||
+                _senderWhitelistIndex[from] == 0 ||
                 _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
             ) {
                 revert Locked();
@@ -249,18 +249,18 @@ contract Whitelist is Ownable {
         }
 
         // When unlocked (Phase 1)
-        
+
         // Special handling for purchases from Uniswap pool
         if (from == _pool) {
             // Check if receiver is on the receiver whitelist
             if (
-                _allowedReceiverWhitelistIndex == 0 || 
-                _receiverWhitelistIndex[to] == 0 || 
+                _allowedReceiverWhitelistIndex == 0 ||
+                _receiverWhitelistIndex[to] == 0 ||
                 _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
             ) {
                 revert ReceiverNotWhitelisted();
             }
-            
+
             // Calculate equivalent USDC amount for token amount
             uint256 estimatedUSDCAmount = IOracle(_oracle).peek(amount);
             if (_contributed[to] + estimatedUSDCAmount > _maxAddressCap) {
@@ -274,17 +274,17 @@ contract Whitelist is Ownable {
         // For non-pool transactions, check both sender and receiver whitelists
         // Check if sender is on the sender whitelist
         if (
-            _allowedSenderWhitelistIndex == 0 || 
-            _senderWhitelistIndex[from] == 0 || 
+            _allowedSenderWhitelistIndex == 0 ||
+            _senderWhitelistIndex[from] == 0 ||
             _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
         ) {
             revert SenderNotWhitelisted();
         }
-        
+
         // Check if receiver is on the receiver whitelist
         if (
-            _allowedReceiverWhitelistIndex == 0 || 
-            _receiverWhitelistIndex[to] == 0 || 
+            _allowedReceiverWhitelistIndex == 0 ||
+            _receiverWhitelistIndex[to] == 0 ||
             _receiverWhitelistIndex[to] > _allowedReceiverWhitelistIndex
         ) {
             revert ReceiverNotWhitelisted();
@@ -298,7 +298,7 @@ contract Whitelist is Ownable {
             _senderWhitelistIndex[whitelisted] = ++_senderWhitelistCount;
         }
     }
-    
+
     /// @notice Internal function used for receiver whitelisting. Only increase whitelist count if address is not whitelisted before
     /// @param whitelisted Address to be added
     function _addReceiverWhitelistedAddress(address whitelisted) private {
