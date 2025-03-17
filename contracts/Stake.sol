@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
-import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IERC1363Spender.sol";
 
@@ -57,7 +57,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param _stakingToken Address of the ERC20 token that can be staked (VULT)
      * @param _rewardToken Address of the ERC20 token used for rewards (USDC)
      */
-    constructor(address _stakingToken, address _rewardToken) {
+    constructor(address _stakingToken, address _rewardToken) Ownable(msg.sender) {
         require(_stakingToken != address(0), "Stake: staking token is the zero address");
         require(_rewardToken != address(0), "Stake: reward token is the zero address");
         

@@ -15,4 +15,4 @@ remappings = [
 ]
 
 [rpc_endpoints]
-mainnet = "https://eth-mainnet.g.alchemy.com/v2/${VULTISIG_ALCHEMY_KEY}"
+mainnet = "https://mainnet.infura.io/v3/${VULTISIG_INFURA_KEY}"

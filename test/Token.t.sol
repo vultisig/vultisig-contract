@@ -149,8 +149,36 @@ contract TokenTest is Test {
     uint24 constant FEE_TIER = 3000;
 
     function setUp() public {
-        // Create a fork of mainnet
-        mainnetFork = vm.createSelectFork("mainnet");
+        // Try to use Alchemy if available, otherwise fall back to Infura
+        string memory alchemyKey;
+        string memory infuraKey;
+        
+        // Try to get Alchemy key
+        try vm.envString("VULTISIG_ALCHEMY_KEY") returns (string memory value) {
+            alchemyKey = value;
+        } catch {
+            alchemyKey = "";
+        }
+        
+        // Try to get Infura key
+        try vm.envString("VULTISIG_INFURA_KEY") returns (string memory value) {
+            infuraKey = value;
+        } catch {
+            infuraKey = "";
+        }
+        
+        if (bytes(alchemyKey).length > 0) {
+            // Use Alchemy if key is available
+            string memory alchemyUrl = string.concat("https://eth-mainnet.g.alchemy.com/v2/", alchemyKey);
+            mainnetFork = vm.createSelectFork(alchemyUrl);
+        } else if (bytes(infuraKey).length > 0) {
+            // Fall back to Infura if Alchemy key is not available
+            string memory infuraUrl = string.concat("https://mainnet.infura.io/v3/", infuraKey);
+            mainnetFork = vm.createSelectFork(infuraUrl);
+        } else {
+            // Fall back to using the RPC endpoint configured in foundry.toml
+            mainnetFork = vm.createSelectFork("mainnet");
+        }
 
         owner = address(0x9999999999999999999999999999999999999999);
         user1 = address(0x1);

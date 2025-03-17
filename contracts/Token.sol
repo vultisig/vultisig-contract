@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.24;
+pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
@@ -21,7 +21,7 @@ contract Token is ERC20, Ownable, IERC1363 {
     event WhitelistContractUpdated(address indexed whitelist);
     error WhitelistRevoked();
 
-    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {
+    constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {  
         _mint(_msgSender(), 100_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
