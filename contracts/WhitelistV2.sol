@@ -268,11 +268,6 @@ contract WhitelistV2 is Ownable {
             return true;
         }
 
-        // Check if sender is whitelisted
-        // if (!isUserWhitelisted(from)) {
-        //     return false;
-        // }
-
         // Phase 0: Whitelist only - recipient and sender must be whitelisted, or sender is adding liquidity
         if (currentPhase == Phase.WHITELIST_ONLY) {
             return ((isUserWhitelisted(to) && isUserWhitelisted(from)) ||
