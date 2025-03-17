@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.28;
+pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
@@ -15,9 +15,7 @@ interface IQuoter {
         uint160 sqrtPriceLimitX96;
     }
 
-    function quoteExactInputSingle(
-        QuoteExactInputSingleParams calldata params
-        )
+    function quoteExactInputSingle(QuoteExactInputSingleParams calldata params)
         external
         view
         returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
@@ -74,6 +72,7 @@ contract WhitelistV2 is Ownable {
      * @dev Constructor
      * @param initialOwner Address of the contract owner
      */
+
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.WHITELIST_ONLY;
         emit PhaseAdvanced(currentPhase);
@@ -328,8 +327,7 @@ contract WhitelistV2 is Ownable {
         // Determine which token is WETH and which is our token
         (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
 
-        try
-            IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
+        try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
                 IQuoter.QuoteExactInputSingleParams({
                     tokenIn: tokenIn,
                     tokenOut: tokenOut,
