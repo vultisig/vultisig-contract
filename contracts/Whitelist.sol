@@ -20,7 +20,7 @@ contract Whitelist is Ownable {
     error Blacklisted();
     error MaxAddressCapOverflow();
 
-    /// @notice Maximum ETH amount to contribute
+    /// @notice Maximum USDC amount to contribute (USDC has 6 decimals)
     uint256 private _maxAddressCap;
     /// @notice Flag for locked period
     bool private _locked;
@@ -44,12 +44,12 @@ contract Whitelist is Ownable {
     mapping(address => uint256) private _receiverWhitelistIndex;
     /// @notice Mapping for blacklisted addresses
     mapping(address => bool) private _isBlacklisted;
-    /// @notice Contributed ETH amounts
+    /// @notice Contributed USDC amounts
     mapping(address => uint256) private _contributed;
 
-    /// @notice Set the default max address cap to 4 eth and lock token transfers initially
+    /// @notice Set the default max address cap to 10,000 USDC (6 decimals) and lock token transfers initially
     constructor() {
-        _maxAddressCap = 4 ether;
+        _maxAddressCap = 10_000 * 10**6; // 10,000 USDC with 6 decimals
         _locked = true; // Initially, liquidity will be locked
         _allowedSenderWhitelistIndex = 0;
         _allowedReceiverWhitelistIndex = 0;
@@ -261,13 +261,13 @@ contract Whitelist is Ownable {
                 revert ReceiverNotWhitelisted();
             }
             
-            // Calculate rough ETH amount for TK amount
-            uint256 estimatedETHAmount = IOracle(_oracle).peek(amount);
-            if (_contributed[to] + estimatedETHAmount > _maxAddressCap) {
+            // Calculate equivalent USDC amount for token amount
+            uint256 estimatedUSDCAmount = IOracle(_oracle).peek(amount);
+            if (_contributed[to] + estimatedUSDCAmount > _maxAddressCap) {
                 revert MaxAddressCapOverflow();
             }
 
-            _contributed[to] += estimatedETHAmount;
+            _contributed[to] += estimatedUSDCAmount;
             return;
         }
 

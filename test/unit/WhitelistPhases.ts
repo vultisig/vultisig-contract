@@ -23,7 +23,8 @@ describe("Whitelist Phases", function () {
     await whitelist.setToken(mockTokenAddress);
     await whitelist.setPool(pool.address);
     await whitelist.setOracle(oracle);
-    await whitelist.setMaxAddressCap(ethers.parseEther("4"));
+    // Set max address cap to 10,000 USDC (6 decimals)
+    await whitelist.setMaxAddressCap(10_000_000_000); // 10,000 * 10^6
     
     // Setup mock token to use the whitelist
     await mockToken.setWhitelist(await whitelist.getAddress());
@@ -166,10 +167,10 @@ describe("Whitelist Phases", function () {
     });
 
     it("Respects address cap for purchases from Uniswap", async function () {
-      const { whitelist, pool, normalUser1, mockToken } = await loadFixture(deployWhitelistFixture);
+      const { whitelist, pool, normalUser1, mockToken, oracle } = await loadFixture(deployWhitelistFixture);
       
-      // Set a smaller max cap for testing
-      await whitelist.setMaxAddressCap(ethers.parseEther("3"));
+      // Set a cap of 5,000 USDC (6 decimals)
+      await whitelist.setMaxAddressCap(5_000_000); // 5,000 * 10^6 (USDC has 6 decimals)
       
       // Unlock the contract
       await whitelist.setLocked(false);
@@ -178,19 +179,74 @@ describe("Whitelist Phases", function () {
       await whitelist.addReceiverWhitelistedAddress(normalUser1.address);
       await whitelist.setAllowedReceiverWhitelistIndex(1);
       
-      // First purchase should work (1.5 ETH)
+      // Mock oracle uses formula: usdcAmount = tokenAmount * 3 / 2 (1.5 USDC per token)
+      
+      // First purchase - about 60% of the cap (2M tokens = 3M USDC)
+      // Using small numbers for testing - our oracle multiplies by 1.5 anyway
       await expect(
-        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 100)
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 2_000_000)
       ).to.not.be.reverted;
       
-      // Second purchase should work (total: 3 ETH)
+      // Second purchase that would exceed the cap (1.5M tokens = 2.25M USDC)
+      // Total would be 5.25M > 5M cap
       await expect(
-        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 100)
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 1_500_000)
+      ).to.be.revertedWithCustomError(whitelist, "MaxAddressCapOverflow");
+      
+      // A smaller second purchase that fits within the cap (1M tokens = 1.5M USDC)
+      // Total would be 4.5M < 5M cap
+      await expect(
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 1_000_000)
+      ).to.not.be.reverted;
+    });
+  });
+
+  describe("Address cap management", function () {
+    it("Can increase address cap after initial transfers", async function () {
+      const { whitelist, pool, normalUser1, mockToken } = await loadFixture(deployWhitelistFixture);
+      
+      // Start with a small cap of 1,000 USDC
+      await whitelist.setMaxAddressCap(1_000_000); // 1,000 * 10^6 (USDC has 6 decimals)
+      
+      // Unlock the contract
+      await whitelist.setLocked(false);
+      
+      // Add normalUser1 to receiver whitelist
+      await whitelist.addReceiverWhitelistedAddress(normalUser1.address);
+      await whitelist.setAllowedReceiverWhitelistIndex(1);
+      
+      // Our mock oracle multiplies by 1.5, so 400K tokens = 600K USDC
+      
+      // First purchase that uses 60% of the cap
+      await expect(
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 400_000)
       ).to.not.be.reverted;
       
-      // Third purchase should exceed cap (4.5 ETH > 3 ETH cap)
+      // Second purchase that would exceed the initial cap (300K tokens = 450K USDC)
+      // Total would be 1.05M > 1M cap
       await expect(
-        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 100)
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 300_000)
+      ).to.be.revertedWithCustomError(whitelist, "MaxAddressCapOverflow");
+      
+      // Now increase the cap to 10,000 USDC
+      await whitelist.setMaxAddressCap(10_000_000); // 10,000 * 10^6 (USDC has 6 decimals)
+      
+      // Now the same purchase should work since we have a higher cap
+      await expect(
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 300_000)
+      ).to.not.be.reverted;
+      
+      // Total contributed so far: 1.05M USDC (600K + 450K)
+      // A much larger purchase that fits under the new cap (5M tokens = 7.5M USDC)
+      // Total would be 8.55M < 10M cap
+      await expect(
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 5_000_000)
+      ).to.not.be.reverted;
+      
+      // But exceeding the new cap should still fail
+      // (1M more tokens = 1.5M USDC, total 10.05M > 10M cap)
+      await expect(
+        mockToken.checkWhitelistFrom(pool.address, normalUser1.address, 1_000_000)
       ).to.be.revertedWithCustomError(whitelist, "MaxAddressCapOverflow");
     });
   });
@@ -271,8 +327,8 @@ describe("Whitelist Phases", function () {
       await whitelist.addReceiverWhitelistedAddress(normalUser2.address);
       await whitelist.setAllowedReceiverWhitelistIndex(2);
       
-      // Set max cap for purchases
-      await whitelist.setMaxAddressCap(ethers.parseEther("4"));
+      // Set max cap for purchases to 10,000 USDC (6 decimals)
+      await whitelist.setMaxAddressCap(10_000_000_000); // 10,000 * 10^6
       
       // Unlock the contract
       await whitelist.setLocked(false);
