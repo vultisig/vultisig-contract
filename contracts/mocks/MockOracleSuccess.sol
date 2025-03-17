@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {IOracle} from "../interfaces/IOracle.sol";
-import "hardhat/console.sol";
 
 contract MockOracleSuccess is IOracle {
     function name() external pure returns (string memory) {
@@ -17,6 +16,6 @@ contract MockOracleSuccess is IOracle {
         // This makes testing easier as we can use smaller numbers
 
         // Simple formula: 1.5 USDC per token (multiply by 3/2)
-        return baseAmount * 3 / 2;
+        return (baseAmount * 3) / 2;
     }
 }
