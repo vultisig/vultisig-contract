@@ -197,55 +197,7 @@ describe("Whitelist", function () {
     });
   });
 
-  // describe("Self-whitelist", function () {
-  //   it("Should self whitelist when ETH is sent", async function () {
-  //     const { whitelist, otherAccount } = await loadFixture(deployWhitelistFixture);
-  //     expect(await whitelist.whitelistIndex(otherAccount)).to.eq(0);
-  //     const balanceChange = 67335443339441n;
 
-  //     expect(
-  //       await otherAccount.sendTransaction({
-  //         to: whitelist,
-  //         value: ethers.parseEther("1"),
-  //       }),
-  //     ).to.changeEtherBalance(otherAccount, -balanceChange);
-  //     expect(await whitelist.whitelistIndex(otherAccount)).to.eq(1);
-  //     expect(
-  //       await otherAccount.sendTransaction({
-  //         to: whitelist,
-  //         value: ethers.parseEther("1"),
-  //       }),
-  //     ).to.changeEtherBalance(otherAccount, -balanceChange);
-  //     expect(await whitelist.whitelistIndex(otherAccount)).to.eq(1);
-  //     expect(await whitelist.whitelistCount()).to.eq(1);
-  //   });
-
-  //   it("Should revert if self whitelist is disabled by owner", async function () {
-  //     const { whitelist, otherAccount } = await loadFixture(deployWhitelistFixture);
-
-  //     await whitelist.setIsSelfWhitelistDisabled(true);
-
-  //     await expect(
-  //       otherAccount.sendTransaction({
-  //         to: whitelist,
-  //         value: ethers.parseEther("1"),
-  //       }),
-  //     ).to.be.revertedWithCustomError(whitelist, "SelfWhitelistDisabled");
-  //   });
-
-  //   it("Should revert if blacklisted by owner", async function () {
-  //     const { whitelist, otherAccount } = await loadFixture(deployWhitelistFixture);
-
-  //     await whitelist.setBlacklisted(otherAccount, true);
-
-  //     await expect(
-  //       otherAccount.sendTransaction({
-  //         to: whitelist,
-  //         value: ethers.parseEther("1"),
-  //       }),
-  //     ).to.be.revertedWithCustomError(whitelist, "Blacklisted");
-  //   });
-  // });
 
   describe("Checkwhitelist", function () {
     it("Should revert when called from non token contract", async function () {

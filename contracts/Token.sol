@@ -16,7 +16,7 @@ contract Token is ERC20, Ownable, IERC1363 {
     string private _ticker;
 
     constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable() {
-        _mint(_msgSender(), 10_000_000 * 1e18);
+        _mint(_msgSender(), 100_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
     }

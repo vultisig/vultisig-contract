@@ -7,7 +7,7 @@ describe("Token", function () {
     const [owner, otherAccount] = await ethers.getSigners();
 
     const Token = await ethers.getContractFactory("Token");
-    const token = await Token.deploy("", "");
+    const token = await Token.deploy("Vultisig Token", "VULT");
 
     return { token, owner, otherAccount };
   }
@@ -16,8 +16,8 @@ describe("Token", function () {
     it("Should set the right symbol and name", async function () {
       const { token } = await loadFixture(deployTokenFixture);
 
-      expect(await token.name()).to.eq("");
-      expect(await token.symbol()).to.eq("");
+      expect(await token.name()).to.eq("Vultisig Token");
+      expect(await token.symbol()).to.eq("VULT");
     });
 
     it("Should set the right owner", async function () {
@@ -26,9 +26,9 @@ describe("Token", function () {
       expect(await token.owner()).to.eq(owner.address);
     });
 
-    it("Should mint 10M tokens to the owner", async function () {
+    it("Should mint 100M tokens to the owner", async function () {
       const { token, owner } = await loadFixture(deployTokenFixture);
-      const totalSupply = 10_000_000n * ethers.parseEther("1");
+      const totalSupply = 100_000_000n * ethers.parseEther("1");
 
       expect(await token.balanceOf(owner.address)).to.eq(totalSupply);
       expect(await token.totalSupply()).to.eq(totalSupply);

@@ -22,7 +22,10 @@ contract TokenWhitelisted is Token {
 
     /// @notice Ownable function to set new whitelist contract address
     function setWhitelistContract(address newWhitelistContract) external onlyOwner {
-        _whitelistContract = newWhitelistContract;
+        // Only allow disabling whitelist contract once (whitelist cannot be re-enabled)
+        if (_whitelistContract != address(0)) {
+            _whitelistContract = newWhitelistContract;
+        }
     }
 
     /// @notice Before token transfer hook

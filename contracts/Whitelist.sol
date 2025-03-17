@@ -7,11 +7,10 @@ import {IOracle} from "./interfaces/IOracle.sol";
 /**
  * @title The contract handles whitelist related features
  * @notice The main functionalities are:
- * - Self whitelist by sending ETH to this contract(only when self whitelist is allowed - controlled by _isSelfWhitelistDisabled flag)
- * - Ownable: Add whitelisted/blacklisted addresses
- * - Ownable: Set max ETH amount to buy(default 4 eth)
+ * - Ownable: Add whitelisted/blacklisted addresses for senders and receivers
+ * - Ownable: Set max ETH amount to buy (default 4 eth)
  * - Ownable: Set univ3 TWAP oracle
- * - Token contract `_beforeTokenTransfer` hook will call `checkWhitelist` function and this function will check if buyer is eligible
+ * - Token contract `_beforeTokenTransfer` hook will call `checkWhitelist` function and this function will check if transfers are eligible
  */
 contract Whitelist is Ownable {
     error SenderNotWhitelisted();
@@ -223,10 +222,6 @@ contract Whitelist is Ownable {
             return;
         }
         
-        if (_locked) {
-            revert Locked();
-        }
-
         // Check if sender is blacklisted
         if (_isBlacklisted[from]) {
             revert Blacklisted();
@@ -236,7 +231,25 @@ contract Whitelist is Ownable {
         if (_isBlacklisted[to]) {
             revert Blacklisted();
         }
+        
+        // If locked, only owner or whitelisted senders can transfer
+        if (_locked) {
+            // Owner check already handled above
+            // Check if sender is on the sender whitelist
+            if (
+                _allowedSenderWhitelistIndex == 0 || 
+                _senderWhitelistIndex[from] == 0 || 
+                _senderWhitelistIndex[from] > _allowedSenderWhitelistIndex
+            ) {
+                revert Locked();
+            }
+            // In locked phase, whitelisted senders can send to anyone
+            // No need to check receiver whitelist
+            return;
+        }
 
+        // When unlocked (Phase 1)
+        
         // Special handling for purchases from Uniswap pool
         if (from == _pool) {
             // Check if receiver is on the receiver whitelist
