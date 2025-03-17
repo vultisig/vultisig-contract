@@ -67,15 +67,13 @@ contract WhitelistV2 is Ownable {
     event OraclePoolUpdated(address indexed newOraclePool);
     event EthSpent(address indexed user, uint256 amount);
     event PhaseLimitsUpdated(
-        uint256 oldPhase1EthLimit,
-        uint256 oldPhase2EthLimit,
-        uint256 newPhase1EthLimit,
-        uint256 newPhase2EthLimit
+        uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
     );
     /**
      * @dev Constructor
      * @param initialOwner Address of the contract owner
      */
+
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.WHITELIST_ONLY;
         emit PhaseAdvanced(currentPhase);
