@@ -173,7 +173,7 @@ contract WhitelistV2 is Ownable {
      * @param pool Address to check
      * @return bool True if the pool is whitelisted
      */
-    function(address pool) public view returns (bool) {
+    function isPoolWhitelisted(address pool) public view returns (bool) {
         return _whitelistedPools.contains(pool);
     }
 

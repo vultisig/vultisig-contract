@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-<<<<<<< HEAD
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-=======
-import {OFT} from "@layerzerolabs/oft-evm/contracts/OFT.sol";
-import {IOFT, SendParam, MessagingFee, MessagingReceipt, OFTReceipt} from "@layerzerolabs/oft-evm/contracts/interfaces/IOFT.sol";
->>>>>>> cd6fd51 (all: migrate to oz5, lz-v2, add tests)
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 
 import {IERC1363} from "./interfaces/IERC1363.sol";
@@ -31,7 +26,7 @@ contract Token is ERC20, Ownable, IERC1363 {
     function mint(uint256 amount) external onlyOwner {
         _mint(_msgSender(), amount);
     }
-    
+
     /**
      * @dev Burns a specific amount of tokens.
      * @param amount The amount of token to be burned.
@@ -44,8 +39,6 @@ contract Token is ERC20, Ownable, IERC1363 {
         _name = name_;
         _ticker = ticker_;
     }
-
-
 
     /**
      * @dev Destroys `amount` tokens from `account`, deducting from the caller's allowance.
@@ -62,18 +55,6 @@ contract Token is ERC20, Ownable, IERC1363 {
 
     function symbol() public view override(ERC20) returns (string memory) {
         return _ticker;
-    }
-
-    function _send(
-        SendParam calldata _sendParam,
-        MessagingFee calldata _fee,
-        address _refundAddress
-    ) internal virtual override returns (MessagingReceipt memory msgReceipt, OFTReceipt memory oftReceipt) {
-        if (bridgeLocked) {
-            revert BridgeLocked();
-        }
-
-        return super._send(_sendParam, _fee, _refundAddress);
     }
 
     /**
