@@ -173,7 +173,7 @@ contract WhitelistV2 is Ownable {
      * @param pool Address to check
      * @return bool True if the pool is whitelisted
      */
-    function isPoolWhitelisted(address pool) public view returns (bool) {
+    function(address pool) public view returns (bool) {
         return _whitelistedPools.contains(pool);
     }
 
@@ -259,13 +259,8 @@ contract WhitelistV2 is Ownable {
 
         // Phase 1 & 2: Whitelisted pools trading with ETH limits
         if (currentPhase == Phase.LIMITED_POOL_TRADING || currentPhase == Phase.EXTENDED_POOL_TRADING) {
-            // If recipient is a whitelisted user and the tokens are coming from a whitelisted pool, allow transaction
-            if (isUserWhitelisted(to) && isPoolWhitelisted(from)) {
-                return true;
-            }
-
             // If recipient is a whitelisted pool, check ETH spending limits
-            if (isPoolWhitelisted(to)) {
+            if (isPoolWhitelisted(from)) {
                 uint256 ethValue = getEthValueForToken(amount);
                 uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? PHASE1_ETH_LIMIT : PHASE2_ETH_LIMIT;
 
