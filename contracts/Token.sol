@@ -15,12 +15,16 @@ import {IWhitelistV2} from "./interfaces/IWhitelistV2.sol";
 contract Token is ERC20, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
+    IWhitelistV2 public whitelist;
+    bool public whitelistRevoked = false;
+
+    event WhitelistContractUpdated(address indexed whitelist);
+    event WhitelistRevoked();
 
     constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable() {
         _mint(_msgSender(), 100_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
-        whitelist = IWhitelistV2(_whitelist);
     }
 
     function mint(uint256 amount) external onlyOwner {
@@ -190,8 +194,16 @@ contract Token is ERC20, Ownable, IERC1363 {
         super._update(from, to, amount);
     }
 
+    function setWhitelist(address _whitelist) external onlyOwner {
+        if (whitelistRevoked) {
+            revert WhitelistRevoked();
+        }
+        whitelist = IWhitelistV2(_whitelist);
+    }
+
     function disableWhitelist() external onlyOwner {
         whitelist = IWhitelistV2(address(0));
+        whitelistRevoked = true;
         emit WhitelistContractUpdated(address(0));
     }
 }
