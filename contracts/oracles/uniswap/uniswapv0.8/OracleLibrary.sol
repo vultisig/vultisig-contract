@@ -19,7 +19,7 @@ library OracleLibrary {
         secondAgos[0] = period;
         secondAgos[1] = 0;
 
-        (int56[] memory tickCumulatives, ) = IUniswapV3Pool(pool).observe(secondAgos);
+        (int56[] memory tickCumulatives,) = IUniswapV3Pool(pool).observe(secondAgos);
         int56 tickCumulativesDelta = tickCumulatives[1] - tickCumulatives[0];
 
         timeWeightedAverageTick = int24(tickCumulativesDelta / int56(uint56(period)));
@@ -34,12 +34,11 @@ library OracleLibrary {
     /// @param baseToken Address of an ERC20 token contract used as the baseAmount denomination
     /// @param quoteToken Address of an ERC20 token contract used as the quoteAmount denomination
     /// @return quoteAmount Amount of quoteToken received for baseAmount of baseToken
-    function getQuoteAtTick(
-        int24 tick,
-        uint128 baseAmount,
-        address baseToken,
-        address quoteToken
-    ) internal pure returns (uint256 quoteAmount) {
+    function getQuoteAtTick(int24 tick, uint128 baseAmount, address baseToken, address quoteToken)
+        internal
+        pure
+        returns (uint256 quoteAmount)
+    {
         uint160 sqrtRatioX96 = TickMath.getSqrtRatioAtTick(tick);
 
         // Calculate quoteAmount with better precision if it doesn't overflow when multiplied by itself
@@ -60,17 +59,16 @@ library OracleLibrary {
     /// @param pool Address of Uniswap V3 pool that we want to observe
     /// @return secondsAgo The number of seconds ago of the oldest observation stored for the pool
     function getOldestObservationSecondsAgo(address pool) internal view returns (uint32 secondsAgo) {
-        (, , uint16 observationIndex, uint16 observationCardinality, , , ) = IUniswapV3Pool(pool).slot0();
+        (,, uint16 observationIndex, uint16 observationCardinality,,,) = IUniswapV3Pool(pool).slot0();
         require(observationCardinality > 0, "NI");
 
-        (uint32 observationTimestamp, , , bool initialized) = IUniswapV3Pool(pool).observations(
-            (observationIndex + 1) % observationCardinality
-        );
+        (uint32 observationTimestamp,,, bool initialized) =
+            IUniswapV3Pool(pool).observations((observationIndex + 1) % observationCardinality);
 
         // The next index might not be initialized if the cardinality is in the process of increasing
         // In this case the oldest observation is always in index 0
         if (!initialized) {
-            (observationTimestamp, , , ) = IUniswapV3Pool(pool).observations(0);
+            (observationTimestamp,,,) = IUniswapV3Pool(pool).observations(0);
         }
 
         secondsAgo = uint32(block.timestamp) - observationTimestamp;
