@@ -11,7 +11,8 @@ import {IWhitelist} from "../interfaces/IWhitelist.sol";
  */
 contract TokenWhitelisted is Token {
     /// @notice whitelist contract address
-    address private _whitelistContract;
+    address public _whitelistContract;
+    bool private _whitelistRevoked = false;
 
     constructor(string memory name_, string memory ticker_) Token(name_, ticker_) {}
 
@@ -20,14 +21,20 @@ contract TokenWhitelisted is Token {
         return _whitelistContract;
     }
 
+    /// @notice Ownable function to revoke setting Whitelist
+    function revokeSettingWhitelist() external onlyOwner {
+        _whitelistRevoked = true;
+        _whitelistContract = address(0);
+    }
+
     /// @notice Ownable function to set new whitelist contract address
     function setWhitelistContract(address newWhitelistContract) external onlyOwner {
-        // Only allow disabling whitelist contract once (whitelist cannot be re-enabled)
-        if (_whitelistContract != address(0)) {
+        // Allow setting the whitelist contract only if not revoked
+        if(!_whitelistRevoked){
             _whitelistContract = newWhitelistContract;
         }
     }
-
+    
     /// @notice Before token transfer hook
     /// @dev It will call `checkWhitelist` function and if it's succsessful, it will transfer tokens, unless revert
     function _beforeTokenTransfer(address from, address to, uint256 amount) internal override {

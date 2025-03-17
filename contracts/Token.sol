@@ -24,18 +24,21 @@ contract Token is ERC20, Ownable, IERC1363 {
     function mint(uint256 amount) external onlyOwner {
         _mint(_msgSender(), amount);
     }
+    
+    /**
+     * @dev Burns a specific amount of tokens.
+     * @param amount The amount of token to be burned.
+     */
+    function burn(uint256 amount) external {
+        _burn(_msgSender(), amount);
+    }
 
     function setNameAndTicker(string calldata name_, string calldata ticker_) external onlyOwner {
         _name = name_;
         _ticker = ticker_;
     }
 
-    /**
-     * @dev Destroys `amount` tokens from the caller. See {ERC20-_burn}.
-     */
-    function burn(uint256 amount) external {
-        _burn(_msgSender(), amount);
-    }
+
 
     /**
      * @dev Destroys `amount` tokens from `account`, deducting from the caller's allowance.

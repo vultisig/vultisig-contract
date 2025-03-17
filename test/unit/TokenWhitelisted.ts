@@ -34,6 +34,35 @@ describe("TokenWhitelisted", function () {
         "Ownable: caller is not the owner",
       );
     });
+    
+    it("Should revoke whitelist setting and clear whitelist contract", async function () {
+      const { token, mockWhitelistSuccess, mockWhitelistFail } = await loadFixture(deployTokenWhitelistedFixture);
+      
+      // First set a whitelist contract
+      await token.setWhitelistContract(mockWhitelistSuccess);
+      expect(await token.whitelistContract()).to.eq(mockWhitelistSuccess);
+      
+      // Revoke the ability to change the whitelist
+      await token.revokeSettingWhitelist();
+      
+      // Verify the whitelist contract address is now cleared (set to address(0))
+      expect(await token.whitelistContract()).to.eq("0x0000000000000000000000000000000000000000");
+      
+      // Try to set a new whitelist contract - should have no effect due to revocation
+      await token.setWhitelistContract(mockWhitelistFail);
+      
+      // Verify the whitelist contract address remains at address(0) and cannot be changed
+      expect(await token.whitelistContract()).to.eq("0x0000000000000000000000000000000000000000");
+    });
+    
+    it("Should not allow non-owner to revoke whitelist setting", async function () {
+      const { token, otherAccount } = await loadFixture(deployTokenWhitelistedFixture);
+      
+      // Attempt to revoke from non-owner account
+      await expect(token.connect(otherAccount).revokeSettingWhitelist()).to.be.revertedWith(
+        "Ownable: caller is not the owner",
+      );
+    });
   });
 
   describe("Transfer", function () {
