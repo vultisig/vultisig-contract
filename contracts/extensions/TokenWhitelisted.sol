@@ -17,8 +17,9 @@ contract TokenWhitelisted is Token {
         string memory name_,
         string memory ticker_,
         address _lzEndpoint,
-        address _delegate
-    ) Token(name_, ticker_, _lzEndpoint, _delegate) {}
+        address _delegate,
+        address _whitelist
+    ) Token(name_, ticker_, _lzEndpoint, _delegate, _whitelist) {}
 
     /// @notice Returns current whitelist contract address
     function whitelistContract() external view returns (address) {

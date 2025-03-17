@@ -8,6 +8,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
+import {IWhitelistV2} from "./interfaces/IWhitelistV2.sol";
 
 /**
  * @title OFT standard with Burnable and ERC1363 standard functions like approveAndCall, transferAndCall
@@ -16,18 +17,23 @@ contract Token is OFT, IERC1363 {
     string private _name;
     string private _ticker;
     bool public bridgeLocked;
+    IWhitelistV2 public whitelist;
 
     error BridgeLocked();
+
+    event WhitelistContractUpdated(address indexed newWhitelist);
 
     constructor(
         string memory name_,
         string memory ticker_,
         address _lzEndpoint,
-        address _delegate
+        address _delegate,
+        address _whitelist
     ) OFT(name_, ticker_, _lzEndpoint, _delegate) Ownable(_msgSender()) {
         _mint(_msgSender(), 10_000_000 * 1e18);
         _name = name_;
         _ticker = ticker_;
+        whitelist = IWhitelistV2(_whitelist);
     }
 
     function mint(uint256 amount) external onlyOwner {
@@ -197,5 +203,23 @@ contract Token is OFT, IERC1363 {
                 }
             }
         }
+    }
+
+    /**
+     * @dev Hook that is called before any transfer of tokens
+     * @param from Address sending tokens
+     * @param to Address receiving tokens
+     * @param amount Amount of tokens being transferred
+     */
+    function _update(address from, address to, uint256 amount) internal virtual override {
+        if (address(whitelist) != address(0)) {
+            require(whitelist.isTransactionAllowed(from, to, amount), "Transaction not allowed by whitelist");
+        }
+        super._update(from, to, amount);
+    }
+
+    function disableWhitelist() external onlyOwner {
+        whitelist = IWhitelistV2(address(0));
+        emit WhitelistContractUpdated(address(0));
     }
 }
