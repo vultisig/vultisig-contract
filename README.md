@@ -84,7 +84,15 @@ Returns current whitelist contract address
 function setWhitelistContract(address newWhitelistContract) external
 ```
 
-Ownable function to set new whitelist contract address
+Ownable function to set new whitelist contract address. Cannot be called if whitelist setting has been revoked.
+
+### revokeSettingWhitelist
+
+```solidity
+function revokeSettingWhitelist() external
+```
+
+Ownable function to permanently revoke the ability to set a whitelist contract. Once called, the whitelist contract address is set to address(0) and cannot be changed again.
 
 ### \_beforeTokenTransfer
 
