@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {Token} from "../contracts/Token.sol";
+import {TokenWhitelisted} from "../contracts/extensions/TokenWhitelisted.sol";
 import {WhitelistV2} from "../contracts/WhitelistV2.sol";
 import {IERC1363Receiver} from "../contracts/interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "../contracts/interfaces/IERC1363Spender.sol";
@@ -103,14 +103,14 @@ contract MockERC1363Spender is IERC1363Spender {
     }
 }
 
-contract TokenTest is Test {
+contract TokenWhitelistedTest is Test {
     using SafeERC20 for IERC20;
 
     // The fork
     uint256 mainnetFork;
 
     // Contracts under test
-    Token public tokenA; // Token on chain A
+    TokenWhitelisted public tokenA; // Token on chain A
     WhitelistV2 public whitelist;
 
     // Uniswap contracts
@@ -221,9 +221,9 @@ contract TokenTest is Test {
         whitelist.whitelistPool(address(swapRouter));
 
         // Deploy tokens on both chains with real whitelist
-        tokenA = new Token("Test Token", "TEST");
+        tokenA = new TokenWhitelisted("Test Token", "TEST");
 
-        tokenA.setWhitelist(address(whitelist));
+        tokenA.setWhitelistContract(address(whitelist));
 
         // Deploy mock receiver and spender
         mockReceiver = new MockERC1363Receiver();

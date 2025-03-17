@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
 import "../contracts/WhitelistV2.sol";
-import "../contracts/Token.sol";
+import {TokenWhitelisted} from "../contracts/extensions/TokenWhitelisted.sol";
 import {IUniswapV3Pool} from "../contracts/interfaces/IUniswapV3Pool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -60,7 +60,7 @@ contract WhitelistV2Test is Test {
 
     // Contracts under test
     WhitelistV2 public whitelist;
-    Token public token;
+    TokenWhitelisted public token;
 
     // Uniswap contracts
     IUniswapV3Factory public uniswapFactory;
@@ -156,9 +156,9 @@ contract WhitelistV2Test is Test {
         whitelist = new WhitelistV2(owner);
 
         // Deploy a test token that uses the whitelist
-        token = new Token("Test Token", "TEST");
+        token = new TokenWhitelisted("Test Token", "TEST");
 
-        token.setWhitelist(address(whitelist));
+        token.setWhitelistContract(address(whitelist));
 
         // Create a new Uniswap pool for our token and WETH
         uint256 tokenAmount = 1000000 * 10 ** 18; // 1M tokens
@@ -642,7 +642,8 @@ contract WhitelistV2Test is Test {
         WhitelistV2 newWhitelist = new WhitelistV2(owner);
 
         // Create token using the new whitelist
-        Token newToken = new Token("New Test Token", "NTEST");
+        TokenWhitelisted newToken = new TokenWhitelisted("New Test Token", "NTEST");
+        newToken.setWhitelistContract(address(newWhitelist));
 
         // Try to check transaction with no oracle set
         newWhitelist.setPhase(WhitelistV2.Phase.LIMITED_POOL_TRADING);
@@ -670,17 +671,10 @@ contract WhitelistV2Test is Test {
         vm.stopPrank();
     }
 
-    // function testRealTimeOraclePrices() public {
-    //     // Test that the contract can get accurate ETH values from the pool
-
-    //     // Set up a price that we expect to be close to what we've initialized in the pool
-    //     uint256 tokenAmount = 10000 ether;
-
-    //     // Get ETH value for tokens using the oracle
-    //     uint256 ethValue = whitelist.getEthValueForToken(tokenAmount);
-
-    //     // At our initialized price of 1 token = 0.0001 ETH, 10000 tokens should be ~1 ETH
-    //     // However, due to price impact and other factors, we check it's in a reasonable range
-    //     assertTrue(ethValue > 0.8 ether && ethValue < 1.2 ether, "ETH value not in expected range");
-    // }
+    function testPhaseLimitsUpdate() public {
+        // Test that phase limits can be updated
+        whitelist.setPhaseLimits(10 ether, 40 ether);
+        assertEq(whitelist.phase1EthLimit(), 10 ether);
+        assertEq(whitelist.phase2EthLimit(), 40 ether);
+    }
 }
