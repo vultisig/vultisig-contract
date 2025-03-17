@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Token} from "../Token.sol";
-import {IWhitelist} from "../interfaces/IWhitelist.sol";
+import {IWhitelistV2} from "../interfaces/IWhitelistV2.sol";
 
 /**
  * @title Extended token contract with whitelist contract interactions
@@ -40,7 +40,10 @@ contract TokenWhitelisted is Token {
     function _update(address from, address to, uint256 amount) internal override {
         require(to != address(this), "Cannot transfer to the token contract address");
         if (_whitelistContract != address(0)) {
-            IWhitelist(_whitelistContract).checkWhitelist(from, to, amount);
+            require(
+                IWhitelistV2(_whitelistContract).isTransactionAllowed(from, to, amount),
+                "Transaction not allowed by whitelist"
+            );
         }
         super._update(from, to, amount);
     }

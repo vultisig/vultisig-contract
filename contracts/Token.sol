@@ -15,11 +15,6 @@ import {IWhitelistV2} from "./interfaces/IWhitelistV2.sol";
 contract Token is ERC20, Ownable, IERC1363 {
     string private _name;
     string private _ticker;
-    IWhitelistV2 public whitelist;
-    bool public whitelistRevoked = false;
-
-    event WhitelistContractUpdated(address indexed whitelist);
-    error WhitelistRevoked();
 
     constructor(string memory name_, string memory ticker_) ERC20(name_, ticker_) Ownable(_msgSender()) {
         _mint(_msgSender(), 100_000_000 * 1e18);
@@ -179,31 +174,5 @@ contract Token is ERC20, Ownable, IERC1363 {
                 }
             }
         }
-    }
-
-    /**
-     * @dev Hook that is called before any transfer of tokens
-     * @param from Address sending tokens
-     * @param to Address receiving tokens
-     * @param amount Amount of tokens being transferred
-     */
-    function _update(address from, address to, uint256 amount) internal virtual override {
-        if (address(whitelist) != address(0)) {
-            require(whitelist.isTransactionAllowed(from, to, amount), "Transaction not allowed by whitelist");
-        }
-        super._update(from, to, amount);
-    }
-
-    function setWhitelist(address _whitelist) external onlyOwner {
-        if (whitelistRevoked) {
-            revert WhitelistRevoked();
-        }
-        whitelist = IWhitelistV2(_whitelist);
-    }
-
-    function disableWhitelist() external onlyOwner {
-        whitelist = IWhitelistV2(address(0));
-        whitelistRevoked = true;
-        emit WhitelistContractUpdated(address(0));
     }
 }

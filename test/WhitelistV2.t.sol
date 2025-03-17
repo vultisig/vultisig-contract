@@ -3,7 +3,7 @@ pragma solidity ^0.8.28;
 
 import "forge-std/Test.sol";
 import "../contracts/WhitelistV2.sol";
-import "../contracts/Token.sol";
+import {TokenWhitelisted} from "../contracts/extensions/TokenWhitelisted.sol";
 import {IUniswapV3Pool} from "../contracts/interfaces/IUniswapV3Pool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
@@ -60,7 +60,7 @@ contract WhitelistV2Test is Test {
 
     // Contracts under test
     WhitelistV2 public whitelist;
-    Token public token;
+    TokenWhitelisted public token;
 
     // Uniswap contracts
     IUniswapV3Factory public uniswapFactory;
@@ -128,9 +128,9 @@ contract WhitelistV2Test is Test {
         whitelist = new WhitelistV2(owner);
 
         // Deploy a test token that uses the whitelist
-        token = new Token("Test Token", "TEST");
+        token = new TokenWhitelisted("Test Token", "TEST");
 
-        token.setWhitelist(address(whitelist));
+        token.setWhitelistContract(address(whitelist));
 
         // Create a new Uniswap pool for our token and WETH
         uint256 tokenAmount = 1000000 * 10 ** 18; // 1M tokens
@@ -617,7 +617,8 @@ contract WhitelistV2Test is Test {
         WhitelistV2 newWhitelist = new WhitelistV2(owner);
 
         // Create token using the new whitelist
-        Token newToken = new Token("New Test Token", "NTEST");
+        TokenWhitelisted newToken = new TokenWhitelisted("New Test Token", "NTEST");
+        newToken.setWhitelistContract(address(newWhitelist));
 
         // Try to check transaction with no oracle set
         newWhitelist.setPhase(WhitelistV2.Phase.LIMITED_POOL_TRADING);
