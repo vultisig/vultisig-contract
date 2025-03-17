@@ -15,7 +15,9 @@ interface IQuoter {
         uint160 sqrtPriceLimitX96;
     }
 
-    function quoteExactInputSingle(QuoteExactInputSingleParams calldata params)
+    function quoteExactInputSingle(
+        QuoteExactInputSingleParams calldata params
+        )
         external
         view
         returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
@@ -65,7 +67,9 @@ contract WhitelistV2 is Ownable {
     event PoolRemovedFromWhitelist(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
     event EthSpent(address indexed user, uint256 amount);
-    event PhaseLimitsUpdated(uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit);
+    event PhaseLimitsUpdated(
+        uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
+        );
     /**
      * @dev Constructor
      * @param initialOwner Address of the contract owner
@@ -333,8 +337,8 @@ contract WhitelistV2 is Ownable {
                     fee: fee,
                     sqrtPriceLimitX96: 0
                 })
-            )
-        returns (uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
+            ) returns (
+                uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
         ) {
             return amountReceived;
         } catch {
