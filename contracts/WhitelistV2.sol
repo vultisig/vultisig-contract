@@ -65,7 +65,7 @@ contract WhitelistV2 is Ownable {
     event PoolWhitelisted(address indexed pool);
     event PoolRemovedFromWhitelist(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
-    event EthSpent(address indexed user, uint256 amount);
+    event EthSpent(address indexed user, uint256 amount, uint256 total);
     event PhaseLimitsUpdated(
         uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
     );
@@ -297,7 +297,7 @@ contract WhitelistV2 is Ownable {
                 if (userEthSpent[to] + ethValue <= limit) {
                     // Update user's ETH spent if the transaction is going through
                     userEthSpent[to] += ethValue;
-                    emit EthSpent(to, ethValue);
+                    emit EthSpent(to, ethValue, userEthSpent[to]);
                     return true;
                 }
                 return false;
