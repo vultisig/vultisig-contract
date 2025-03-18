@@ -6,6 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IERC1363Spender.sol";
+import "./interfaces/IUniswapRouter.sol";
 
 /**
  * @title Stake
@@ -23,6 +24,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
     /// @notice USDC token for rewards
     IERC20 public immutable rewardToken;
+    
+    /// @notice Default Uniswap-like router for sweeping tokens
+    address public defaultRouter;
 
     /// @notice Accumulated reward tokens per share, scaled by 1e12
     uint256 public accRewardPerShare;
@@ -51,6 +55,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     event RewardsUpdated(uint256 newAccRewardPerShare, uint256 rewardAmount);
     event OwnerWithdrawnRewards(uint256 amount);
     event OwnerWithdrawnExtraTokens(uint256 amount);
+    event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
+    event RouterSet(address indexed router);
+    event Migrated(address indexed user, address indexed newContract, uint256 amount);
 
     /**
      * @dev Constructor sets the staking and reward tokens
@@ -119,32 +126,31 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @dev Allows a user to deposit tokens without using approveAndCall
-     * User must approve tokens first
-     * @param amount Amount of tokens to deposit
+     * @dev Internal function to handle deposits, used by both normal deposits and approveAndCall
+     * @param _depositor Address transferring the tokens (may be different from _user in some cases)
+     * @param _user Address to attribute the deposit to
+     * @param _amount Amount of tokens to deposit
      */
-    function deposit(uint256 amount) external nonReentrant {
-        require(amount > 0, "Stake: amount must be greater than 0");
-
+    function _deposit(address _depositor, address _user, uint256 _amount) internal {
         // Update reward variables
         updateRewards();
 
         // Get user info
-        UserInfo storage user = userInfo[msg.sender];
+        UserInfo storage user = userInfo[_user];
 
-        // Transfer tokens from the user to this contract
-        stakingToken.safeTransferFrom(msg.sender, address(this), amount);
+        // Transfer tokens from the depositor to this contract
+        stakingToken.safeTransferFrom(_depositor, address(this), _amount);
 
         // Update user staking amount
-        user.amount += amount;
-        totalStaked += amount;
+        user.amount += _amount;
+        totalStaked += _amount;
 
         // Update user reward debt
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
 
-        emit Deposited(msg.sender, amount);
+        emit Deposited(_user, _amount);
     }
-    
+
     /**
      * @dev Allows an approved sender to deposit tokens on behalf of another user
      * This is particularly useful for migration between staking contracts
@@ -153,30 +159,23 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param _amount Amount of tokens to deposit
      * @return Amount of tokens deposited
      */
-    function depositForUser(address _user, uint256 _amount) external nonReentrant returns (uint256) {
+    function depositForUser(address _user, uint256 _amount) public nonReentrant returns (uint256) {
         require(_amount > 0, "Stake: amount must be greater than 0");
         require(_user != address(0), "Stake: user is the zero address");
 
-        // Update reward variables
-        updateRewards();
-
-        // Get user info for the specified user, not msg.sender
-        UserInfo storage user = userInfo[_user];
-
-        // Transfer tokens from the sender to this contract
-        stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
-
-        // Update specified user's staking amount
-        user.amount += _amount;
-        totalStaked += _amount;
-
-        // Update specified user's reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
-
-        // Emit deposit event for the specified user
-        emit Deposited(_user, _amount);
-        
+        _deposit(msg.sender, _user, _amount);
         return _amount;
+    }
+    
+    /**
+     * @dev Allows a user to deposit tokens without using approveAndCall
+     * User must approve tokens first
+     * @param amount Amount of tokens to deposit
+     * @return Amount of tokens deposited
+     */
+    function deposit(uint256 amount) external returns (uint256) {
+        // Simply call depositForUser with msg.sender as the user
+        return depositForUser(msg.sender, amount);
     }
 
     /**
@@ -208,28 +207,42 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     }
 
     /**
+     * @dev Internal function to handle token withdrawals
+     * @param _user Address of the user withdrawing tokens
+     * @param _amount Amount of tokens to withdraw
+     * @param _claimRewards Whether to claim rewards before withdrawing
+     */
+    function _withdraw(address _user, uint256 _amount, bool _claimRewards) internal {
+        UserInfo storage user = userInfo[_user];
+        require(user.amount >= _amount, "Stake: insufficient balance");
+
+        // Claim rewards if requested
+        if (_claimRewards) {
+            claim();
+        } else {
+            // If not claiming rewards, still update reward variables
+            updateRewards();
+        }
+
+        // Update user staking amount
+        user.amount -= _amount;
+        totalStaked -= _amount;
+
+        // Update reward debt
+        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+
+        // Transfer staking tokens back to the user
+        stakingToken.safeTransfer(_user, _amount);
+    }
+
+    /**
      * @dev Allows a user to withdraw their staked tokens after claiming rewards
      * @param amount Amount of tokens to withdraw
      */
     function withdraw(uint256 amount) external nonReentrant {
         require(amount > 0, "Stake: amount must be greater than 0");
 
-        UserInfo storage user = userInfo[msg.sender];
-        require(user.amount >= amount, "Stake: insufficient balance");
-
-        // Claim rewards first
-        claim();
-
-        // Update user staking amount
-        user.amount -= amount;
-        totalStaked -= amount;
-
-        // Update reward debt after withdrawal
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
-
-        // Transfer staking tokens back to the user
-        stakingToken.safeTransfer(msg.sender, amount);
-
+        _withdraw(msg.sender, amount, true);
         emit Withdrawn(msg.sender, amount);
     }
 
@@ -240,23 +253,32 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function forceWithdraw(uint256 amount) external nonReentrant {
         require(amount > 0, "Stake: amount must be greater than 0");
 
-        UserInfo storage user = userInfo[msg.sender];
-        require(user.amount >= amount, "Stake: insufficient balance");
-
-        // Update reward variables
-        updateRewards();
-
-        // Update user staking amount
-        user.amount -= amount;
-        totalStaked -= amount;
-
-        // Update reward debt to effectively skip rewards for this period
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
-
-        // Transfer staking tokens back to the user
-        stakingToken.safeTransfer(msg.sender, amount);
-
+        _withdraw(msg.sender, amount, false);
         emit ForceWithdrawn(msg.sender, amount);
+    }
+
+    /**
+     * @dev Internal function for owner to withdraw tokens
+     * @param _token The token to withdraw
+     * @param _amount Amount to withdraw (0 for all available)
+     * @param _totalAvailable Total amount available for withdrawal
+     * @return Amount withdrawn
+     */
+    function _ownerWithdraw(
+        IERC20 _token, 
+        uint256 _amount, 
+        uint256 _totalAvailable
+    ) internal returns (uint256) {
+        require(_totalAvailable > 0, "Stake: no tokens available for withdrawal");
+        
+        // If amount is 0, withdraw all available tokens
+        uint256 withdrawAmount = _amount == 0 ? _totalAvailable : _amount;
+        require(withdrawAmount <= _totalAvailable, "Stake: amount exceeds available balance");
+        
+        // Transfer tokens to owner
+        _token.safeTransfer(owner(), withdrawAmount);
+        
+        return withdrawAmount;
     }
 
     /**
@@ -271,15 +293,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Calculate unclaimed USDC (current balance - last processed balance)
         uint256 currentBalance = rewardToken.balanceOf(address(this));
         uint256 unclaimedBalance = currentBalance - lastRewardBalance;
-        require(unclaimedBalance > 0, "Stake: no unclaimed rewards");
-
-        // If amount is 0, withdraw all unclaimed rewards
-        uint256 withdrawAmount = amount == 0 ? unclaimedBalance : amount;
-        require(withdrawAmount <= unclaimedBalance, "Stake: amount exceeds unclaimed balance");
-
-        // Transfer rewards to owner
-        rewardToken.safeTransfer(owner(), withdrawAmount);
-
+        
+        uint256 withdrawAmount = _ownerWithdraw(rewardToken, amount, unclaimedBalance);
+        
         emit OwnerWithdrawnRewards(withdrawAmount);
         return withdrawAmount;
     }
@@ -293,16 +309,11 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Calculate extra tokens (current balance - tracked total)
         uint256 currentBalance = stakingToken.balanceOf(address(this));
         require(currentBalance > totalStaked, "Stake: no extra tokens available");
-
+        
         uint256 extraTokens = currentBalance - totalStaked;
-
-        // If amount is 0, withdraw all extra tokens
-        uint256 withdrawAmount = amount == 0 ? extraTokens : amount;
-        require(withdrawAmount <= extraTokens, "Stake: amount exceeds extra token balance");
-
-        // Transfer tokens to owner
-        stakingToken.safeTransfer(owner(), withdrawAmount);
-
+        
+        uint256 withdrawAmount = _ownerWithdraw(stakingToken, amount, extraTokens);
+        
         emit OwnerWithdrawnExtraTokens(withdrawAmount);
         return withdrawAmount;
     }
@@ -322,30 +333,13 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(msg.sender == address(stakingToken), "Stake: caller is not the staking token");
         require(value > 0, "Stake: amount must be greater than 0");
 
-        // Update reward variables
-        updateRewards();
-
-        // Get user info
-        UserInfo storage user = userInfo[owner];
-
-        // Transfer tokens from the user to this contract
-        stakingToken.safeTransferFrom(owner, address(this), value);
-
-        // Update user staking amount
-        user.amount += value;
-        totalStaked += value;
-
-        // Update user reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
-
-        emit Deposited(owner, value);
+        _deposit(owner, owner, value);
 
         // Return the function selector to confirm transaction was accepted
         return IERC1363Spender.onApprovalReceived.selector;
     }
 
-    /// @notice Event emitted when tokens are migrated to a new staking contract
-    event Migrated(address indexed user, address indexed newContract, uint256 amount);
+
 
     /**
      * @dev Migrates user's entire stake to a new staking contract
@@ -408,5 +402,64 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         emit Migrated(msg.sender, _newStakingContract, stakedAmount);
         
         return stakedAmount;
+    }
+    
+    /**
+     * @dev Sets the router for sweep operations
+     * @param _router The address of the Uniswap-like router to use
+     */
+    function setRouter(address _router) external onlyOwner {
+        require(_router != address(0), "Stake: router is the zero address");
+        defaultRouter = _router;
+        emit RouterSet(_router);
+    }
+
+    /**
+     * @dev Sweeps a token from the contract and swaps it into the reward token using the default router
+     * @param _token Address of the token to sweep (can't be staking or reward token)
+     * @return The amount of reward tokens received from the swap
+     */
+    function sweep(address _token) external nonReentrant returns (uint256) {
+        require(defaultRouter != address(0), "Stake: default router not set");
+        require(_token != address(stakingToken), "Stake: cannot sweep staking token");
+        require(_token != address(rewardToken), "Stake: cannot sweep reward token");
+        
+        // Get the token balance
+        IERC20 token = IERC20(_token);
+        uint256 balance = token.balanceOf(address(this));
+        require(balance > 0, "Stake: no tokens to sweep");
+        
+        // Setup the swap path: token -> reward token
+        address[] memory path = new address[](2);
+        path[0] = _token;
+        path[1] = address(rewardToken);
+        
+        // Approve the router to spend the token
+        token.approve(defaultRouter, balance);
+        
+        // Set swap parameters
+        uint256 amountOutMin = 0; // Accept any amount
+        uint256 deadline = block.timestamp + 24 hours;
+        
+        // Execute the swap
+        IUniswapRouter router = IUniswapRouter(defaultRouter);
+        uint256[] memory amounts = router.swapExactTokensForTokens(
+            balance,
+            amountOutMin,
+            path,
+            address(this),
+            deadline
+        );
+        
+        // Clear the approval
+        token.approve(defaultRouter, 0);
+        
+        // Update the lastRewardBalance to account for the new rewards
+        updateRewards();
+        
+        // Emit the sweep event
+        emit TokenSwept(_token, balance, amounts[amounts.length - 1]);
+        
+        return amounts[amounts.length - 1];
     }
 }
