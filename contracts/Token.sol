@@ -7,7 +7,6 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {IERC1363} from "./interfaces/IERC1363.sol";
 import {IERC1363Receiver} from "./interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "./interfaces/IERC1363Spender.sol";
-import {IWhitelistV2} from "./interfaces/IWhitelistV2.sol";
 
 /**
  * @title Token with ERC1363 standard functions like approveAndCall, transferAndCall

@@ -22,17 +22,17 @@ interface IQuoter {
 }
 
 /**
- * @title TokenWhitelist
- * @dev Manages whitelisted users, pools, and launch phases for a token
+ * @title LaunchList
+ * @dev Manages launch list addresses, pools, and launch phases for a token
  */
-contract WhitelistV2 is Ownable {
+contract LaunchList is Ownable {
     using EnumerableSet for EnumerableSet.AddressSet;
 
     // Phase definitions
     enum Phase {
-        WHITELIST_ONLY, // Phase 0: Whitelisted users can only send to other whitelisted users
-        LIMITED_POOL_TRADING, // Phase 1: Whitelisted users can trade with pools up to 1 ETH
-        EXTENDED_POOL_TRADING, // Phase 2: Whitelisted users can trade with pools up to 4 ETH
+        LAUNCH_LIST_ONLY, // Phase 0: Launch list addresses can only send to other launch list addresses
+        LIMITED_POOL_TRADING, // Phase 1: Launch list addresses can trade with pools up to 1 ETH
+        EXTENDED_POOL_TRADING, // Phase 2: Launch list addresses can trade with pools up to 4 ETH
         PUBLIC // Phase 3: No restrictions
 
     }
@@ -40,15 +40,15 @@ contract WhitelistV2 is Ownable {
     // Current launch phase
     Phase public currentPhase;
 
-    // Whitelist mappings
-    EnumerableSet.AddressSet private _whitelistedUsers;
-    EnumerableSet.AddressSet private _whitelistedPools;
+    // Launch list mappings
+    EnumerableSet.AddressSet private _launchListAddresses;
+    EnumerableSet.AddressSet private _launchListPools;
 
     // Uniswap V3 Oracle pool address
     address public uniswapV3OraclePool;
 
     // Mapping of user addresses to their ETH spent during limited phases
-    mapping(address => uint256) public userEthSpent;
+    mapping(address => uint256) public addressEthSpent;
 
     // Purchase limits by phase
     uint256 public phase1EthLimit = 1 ether;
@@ -60,10 +60,10 @@ contract WhitelistV2 is Ownable {
 
     // Events
     event PhaseAdvanced(Phase newPhase);
-    event UserWhitelisted(address indexed user);
-    event UserRemovedFromWhitelist(address indexed user);
-    event PoolWhitelisted(address indexed pool);
-    event PoolRemovedFromWhitelist(address indexed pool);
+    event LaunchListAddressAdded(address indexed addr);
+    event LaunchListAddressRemoved(address indexed addr);
+    event LaunchListPoolAdded(address indexed pool);
+    event PoolRemovedFromLaunchList(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
     event EthSpent(address indexed user, uint256 amount, uint256 total);
     event PhaseLimitsUpdated(
@@ -75,7 +75,7 @@ contract WhitelistV2 is Ownable {
      */
 
     constructor(address initialOwner) Ownable(initialOwner) {
-        currentPhase = Phase.WHITELIST_ONLY;
+        currentPhase = Phase.LAUNCH_LIST_ONLY;
         emit PhaseAdvanced(currentPhase);
         emit PhaseLimitsUpdated(0, 0, phase1EthLimit, phase2EthLimit);
     }
@@ -110,74 +110,74 @@ contract WhitelistV2 is Ownable {
         emit PhaseAdvanced(newPhase);
     }
 
-    // ==================== Whitelist Management ====================
+    // ==================== Launch List Management ====================
 
     /**
-     * @dev Adds a user to the whitelist
-     * @param user Address to whitelist
+     * @dev Adds an address to the launch list
+     * @param addr Address to add
      * @notice Can only be called by the owner
      */
-    function whitelistUser(address user) external onlyOwner {
-        require(user != address(0), "Cannot whitelist zero address");
-        require(_whitelistedUsers.add(user), "User already whitelisted");
-        emit UserWhitelisted(user);
+    function launchListAddress(address addr) external onlyOwner {
+        require(addr != address(0), "Cannot add zero address");
+        require(_launchListAddresses.add(addr), "Address already on launch list");
+        emit LaunchListAddressAdded(addr);
     }
 
     /**
-     * @dev Adds multiple users to the whitelist
-     * @param users Array of addresses to whitelist
+     * @dev Adds multiple addresses to the launch list
+     * @param addrs Array of addresses to add
      * @notice Can only be called by the owner
      */
-    function whitelistUsers(address[] calldata users) external onlyOwner {
-        for (uint256 i = 0; i < users.length; i++) {
-            if (users[i] != address(0) && _whitelistedUsers.add(users[i])) {
-                emit UserWhitelisted(users[i]);
+    function launchListAddresses(address[] calldata addrs) external onlyOwner {
+        for (uint256 i = 0; i < addrs.length; i++) {
+            if (addrs[i] != address(0) && _launchListAddresses.add(addrs[i])) {
+                emit LaunchListAddressAdded(addrs[i]);
             }
         }
     }
 
     /**
-     * @dev Removes a user from the whitelist
-     * @param user Address to remove
+     * @dev Removes an address from the launch list
+     * @param addr Address to remove
      * @notice Can only be called by the owner
      */
-    function removeUserFromWhitelist(address user) external onlyOwner {
-        require(_whitelistedUsers.remove(user), "User not whitelisted");
-        emit UserRemovedFromWhitelist(user);
+    function removeLaunchListAddress(address addr) external onlyOwner {
+        require(_launchListAddresses.remove(addr), "Address not on launch list");
+        emit LaunchListAddressRemoved(addr);
     }
 
     /**
-     * @dev Adds a pool to the whitelist
-     * @param pool Address of the pool to whitelist
+     * @dev Adds a pool to the launch list
+     * @param pool Address of the pool to add
      * @notice Can only be called by the owner
      */
-    function whitelistPool(address pool) external onlyOwner {
-        require(pool != address(0), "Cannot whitelist zero address");
-        require(_whitelistedPools.add(pool), "Pool already whitelisted");
-        emit PoolWhitelisted(pool);
+    function launchListPool(address pool) external onlyOwner {
+        require(pool != address(0), "Cannot add zero address");
+        require(_launchListPools.add(pool), "Pool already on launch list");
+        emit LaunchListPoolAdded(pool);
     }
 
     /**
-     * @dev Adds multiple pools to the whitelist
-     * @param pools Array of pool addresses to whitelist
+     * @dev Adds multiple pools to the launch list
+     * @param pools Array of pool addresses to add
      * @notice Can only be called by the owner
      */
-    function whitelistPools(address[] calldata pools) external onlyOwner {
+    function launchListPools(address[] calldata pools) external onlyOwner {
         for (uint256 i = 0; i < pools.length; i++) {
-            if (pools[i] != address(0) && _whitelistedPools.add(pools[i])) {
-                emit PoolWhitelisted(pools[i]);
+            if (pools[i] != address(0) && _launchListPools.add(pools[i])) {
+                emit LaunchListPoolAdded(pools[i]);
             }
         }
     }
 
     /**
-     * @dev Removes a pool from the whitelist
+     * @dev Removes a pool from the launch list
      * @param pool Address of the pool to remove
      * @notice Can only be called by the owner
      */
-    function removePoolFromWhitelist(address pool) external onlyOwner {
-        require(_whitelistedPools.remove(pool), "Pool not whitelisted");
-        emit PoolRemovedFromWhitelist(pool);
+    function removePoolFromLaunchList(address pool) external onlyOwner {
+        require(_launchListPools.remove(pool), "Pool not on launch list");
+        emit PoolRemovedFromLaunchList(pool);
     }
 
     /**
@@ -191,73 +191,73 @@ contract WhitelistV2 is Ownable {
         emit OraclePoolUpdated(_uniswapV3OraclePool);
     }
 
-    // ==================== Whitelist Queries ====================
+    // ==================== Launch List Queries ====================
 
     /**
-     * @dev Checks if a user is whitelisted
-     * @param user Address to check
-     * @return bool True if the user is whitelisted
+     * @dev Checks if an address is on the launch list
+     * @param addr Address to check
+     * @return bool True if the address is on the launch list
      */
-    function isUserWhitelisted(address user) public view returns (bool) {
-        return _whitelistedUsers.contains(user);
+    function isAddressOnLaunchList(address addr) public view returns (bool) {
+        return _launchListAddresses.contains(addr);
     }
 
     /**
-     * @dev Checks if a pool is whitelisted
+     * @dev Checks if a pool is on the launch list
      * @param pool Address to check
-     * @return bool True if the pool is whitelisted
+     * @return bool True if the pool is on the launch list
      */
-    function isPoolWhitelisted(address pool) public view returns (bool) {
-        return _whitelistedPools.contains(pool);
+    function isPoolOnLaunchList(address pool) public view returns (bool) {
+        return _launchListPools.contains(pool);
     }
 
     /**
-     * @dev Gets the total number of whitelisted users
-     * @return uint256 Number of whitelisted users
+     * @dev Gets the total number of addresses on the launch list
+     * @return uint256 Number of addresses on the launch list
      */
-    function getWhitelistedUserCount() external view returns (uint256) {
-        return _whitelistedUsers.length();
+    function getLaunchListAddressCount() external view returns (uint256) {
+        return _launchListAddresses.length();
     }
 
     /**
-     * @dev Gets a whitelisted user by index
+     * @dev Gets an address on the launch list by index
      * @param index Index in the set
-     * @return address User address
+     * @return address Address on the launch list
      */
-    function getWhitelistedUserAtIndex(uint256 index) external view returns (address) {
-        return _whitelistedUsers.at(index);
+    function getLaunchListAddressAtIndex(uint256 index) external view returns (address) {
+        return _launchListAddresses.at(index);
     }
 
     /**
-     * @dev Gets all whitelisted users
-     * @return users Array of whitelisted user addresses
+     * @dev Gets all addresses on the launch list
+     * @return addrs Array of addresses on the launch list
      */
-    function getAllWhitelistedUsers() external view returns (address[] memory) {
-        uint256 length = _whitelistedUsers.length();
-        address[] memory users = new address[](length);
+    function getAllLaunchListAddresses() external view returns (address[] memory) {
+        uint256 length = _launchListAddresses.length();
+        address[] memory addrs = new address[](length);
 
         for (uint256 i = 0; i < length; i++) {
-            users[i] = _whitelistedUsers.at(i);
+            addrs[i] = _launchListAddresses.at(i);
         }
 
-        return users;
+        return addrs;
     }
 
     /**
-     * @dev Gets the total number of whitelisted pools
-     * @return uint256 Number of whitelisted pools
+     * @dev Gets the total number of pools on the launch list
+     * @return uint256 Number of pools on the launch list
      */
-    function getWhitelistedPoolCount() external view returns (uint256) {
-        return _whitelistedPools.length();
+    function getLaunchListPoolCount() external view returns (uint256) {
+        return _launchListPools.length();
     }
 
     /**
-     * @dev Gets a whitelisted pool by index
+     * @dev Gets a pool on the launch list by index
      * @param index Index in the set
      * @return address Pool address
      */
-    function getWhitelistedPoolAtIndex(uint256 index) external view returns (address) {
-        return _whitelistedPools.at(index);
+    function getLaunchListPoolAtIndex(uint256 index) external view returns (address) {
+        return _launchListPools.at(index);
     }
 
     // ==================== Transaction Validation ====================
@@ -280,34 +280,35 @@ contract WhitelistV2 is Ownable {
             return true;
         }
 
-        // Phase 0: Whitelist only - recipient and sender must be whitelisted, or sender is adding liquidity
-        if (currentPhase == Phase.WHITELIST_ONLY) {
+        // Phase 0: launch list only - recipient and sender must be on the launch list, or sender is adding liquidity
+        if (currentPhase == Phase.LAUNCH_LIST_ONLY) {
             return (
-                (isUserWhitelisted(to) && isUserWhitelisted(from)) || (isUserWhitelisted(from) && isPoolWhitelisted(to))
+                (isAddressOnLaunchList(to) && isAddressOnLaunchList(from))
+                    || (isAddressOnLaunchList(from) && isPoolOnLaunchList(to))
             );
         }
 
-        // Phase 1 & 2: Whitelisted pools trading with ETH limits
+        // Phase 1 & 2: Launch list pools trading with ETH limits
         if (currentPhase == Phase.LIMITED_POOL_TRADING || currentPhase == Phase.EXTENDED_POOL_TRADING) {
-            // If recipient is a whitelisted pool, check ETH spending limits
-            if (isPoolWhitelisted(from) && isUserWhitelisted(to)) {
+            // If recipient is a launch list pool, check ETH spending limits
+            if (isPoolOnLaunchList(from) && isAddressOnLaunchList(to)) {
                 uint256 ethValue = getEthValueForToken(amount);
                 uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1EthLimit : phase2EthLimit;
 
-                if (userEthSpent[to] + ethValue <= limit) {
+                if (addressEthSpent[to] + ethValue <= limit) {
                     // Update user's ETH spent if the transaction is going through
-                    userEthSpent[to] += ethValue;
-                    emit EthSpent(to, ethValue, userEthSpent[to]);
+                    addressEthSpent[to] += ethValue;
+                    emit EthSpent(to, ethValue, addressEthSpent[to]);
                     return true;
                 }
                 return false;
-            } else if (isPoolWhitelisted(from) && isPoolWhitelisted(to)) {
-                // If both sender and recipient are whitelisted pools, allow transaction
+            } else if (isPoolOnLaunchList(from) && isPoolOnLaunchList(to)) {
+                // If both sender and recipient are launch list pools, allow transaction
                 // to support routers and solvers
                 return true;
             }
 
-            // If sending to unwhitelisted address that's not a pool, deny transaction
+            // If sending to address that's not a launch list pool, deny transaction
             return false;
         }
 
