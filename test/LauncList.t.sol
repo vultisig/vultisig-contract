@@ -31,9 +31,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(
-        MintParams calldata params
-    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(MintParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 // Uniswap V3 Router Interface
@@ -149,7 +149,7 @@ contract LaunchListTest is Test {
         vm.deal(nonLaunchListUser, 100 ether);
 
         // Get WETH by wrapping ETH
-        (bool success, ) = WETH_ADDRESS.call{value: 10 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 10 ether}("");
         require(success, "Failed to get WETH");
 
         // Deploy the launch list contract
@@ -306,11 +306,8 @@ contract LaunchListTest is Test {
         // Test getting pool at index
         address poolAtIndex = launchList.getLaunchListPoolAtIndex(0);
         assertTrue(
-            poolAtIndex == pool1 ||
-                poolAtIndex == pool2 ||
-                poolAtIndex == address(uniswapPool) ||
-                poolAtIndex == address(swapRouter) ||
-                poolAtIndex == address(positionManager)
+            poolAtIndex == pool1 || poolAtIndex == pool2 || poolAtIndex == address(uniswapPool)
+                || poolAtIndex == address(swapRouter) || poolAtIndex == address(positionManager)
         );
     }
 
@@ -371,7 +368,7 @@ contract LaunchListTest is Test {
         vm.startPrank(user1);
 
         // Wrap ETH to get WETH for trading
-        (bool success, ) = WETH_ADDRESS.call{value: 1 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 1 ether}("");
         require(success, "Failed to get WETH");
 
         // Attempt to buy tokens with 0.9 ETH worth of WETH
@@ -393,7 +390,7 @@ contract LaunchListTest is Test {
 
         // Test: User cannot exceed the 1 ETH limit
         // Wrap more ETH
-        (success, ) = WETH_ADDRESS.call{value: 1 ether}("");
+        (success,) = WETH_ADDRESS.call{value: 1 ether}("");
         require(success, "Failed to get WETH");
 
         vm.expectRevert();
@@ -414,7 +411,7 @@ contract LaunchListTest is Test {
 
         // Test: Non-launch listed user cannot trade with Uniswap
         vm.startPrank(nonLaunchListUser);
-        (success, ) = WETH_ADDRESS.call{value: 1 ether}("");
+        (success,) = WETH_ADDRESS.call{value: 1 ether}("");
         require(success, "Failed to get WETH");
         weth.approve(address(swapRouter), 1 ether);
 
@@ -444,7 +441,7 @@ contract LaunchListTest is Test {
         weth.approve(address(swapRouter), type(uint256).max);
 
         // Wrap ETH to get WETH for trading
-        (bool success, ) = WETH_ADDRESS.call{value: 8 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 8 ether}("");
         require(success, "Failed to get WETH");
 
         // Test trading in multiple transactions to reach the limit
@@ -524,7 +521,7 @@ contract LaunchListTest is Test {
         // Prepare user for swapping
         vm.startPrank(user1);
 
-        (bool success, ) = WETH_ADDRESS.call{value: 8 ether}("");
+        (bool success,) = WETH_ADDRESS.call{value: 8 ether}("");
         require(success, "Failed to get WETH");
 
         weth.approve(address(swapRouter), type(uint256).max);

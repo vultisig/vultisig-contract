@@ -15,9 +15,7 @@ interface IQuoter {
         uint160 sqrtPriceLimitX96;
     }
 
-    function quoteExactInputSingle(
-        QuoteExactInputSingleParams calldata params
-    )
+    function quoteExactInputSingle(QuoteExactInputSingleParams calldata params)
         external
         view
         returns (uint256 amountOut, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate);
@@ -36,6 +34,7 @@ contract LaunchList is Ownable {
         LIMITED_POOL_TRADING, // Phase 1: Launch list addresses can trade with pools up to 1 ETH
         EXTENDED_POOL_TRADING, // Phase 2: Launch list addresses can trade with pools up to 4 ETH
         PUBLIC // Phase 3: No restrictions
+
     }
 
     // Current launch phase
@@ -68,10 +67,7 @@ contract LaunchList is Ownable {
     event OraclePoolUpdated(address indexed newOraclePool);
     event EthSpent(address indexed user, uint256 amount, uint256 total);
     event PhaseLimitsUpdated(
-        uint256 oldPhase1EthLimit,
-        uint256 oldPhase2EthLimit,
-        uint256 newPhase1EthLimit,
-        uint256 newPhase2EthLimit
+        uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
     );
     /**
      * @dev Constructor
@@ -286,8 +282,10 @@ contract LaunchList is Ownable {
 
         // Phase 0: launch list only - recipient and sender must be on the launch list, or sender is adding liquidity
         if (currentPhase == Phase.LAUNCH_LIST_ONLY) {
-            return ((isAddressOnLaunchList(to) && isAddressOnLaunchList(from)) ||
-                (isAddressOnLaunchList(from) && isPoolOnLaunchList(to)));
+            return (
+                (isAddressOnLaunchList(to) && isAddressOnLaunchList(from))
+                    || (isAddressOnLaunchList(from) && isPoolOnLaunchList(to))
+            );
         }
 
         // Phase 1 & 2: Launch list pools trading with ETH limits
@@ -335,21 +333,16 @@ contract LaunchList is Ownable {
         // Determine which token is WETH and which is our token
         (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
 
-        try
-            IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
-                IQuoter.QuoteExactInputSingleParams({
-                    tokenIn: tokenIn,
-                    tokenOut: tokenOut,
-                    amountIn: tokenAmount,
-                    fee: fee,
-                    sqrtPriceLimitX96: 0
-                })
-            )
-        returns (
-            uint256 amountReceived,
-            uint160 sqrtPriceX96After,
-            uint32 initializedTicksCrossed,
-            uint256 gasEstimate
+        try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
+            IQuoter.QuoteExactInputSingleParams({
+                tokenIn: tokenIn,
+                tokenOut: tokenOut,
+                amountIn: tokenAmount,
+                fee: fee,
+                sqrtPriceLimitX96: 0
+            })
+        ) returns (
+            uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
         ) {
             return amountReceived;
         } catch {
