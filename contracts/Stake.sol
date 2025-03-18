@@ -144,6 +144,40 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         emit Deposited(msg.sender, amount);
     }
+    
+    /**
+     * @dev Allows an approved sender to deposit tokens on behalf of another user
+     * This is particularly useful for migration between staking contracts
+     * Sender must approve tokens first
+     * @param _user Address of the user to attribute the deposit to
+     * @param _amount Amount of tokens to deposit
+     * @return Amount of tokens deposited
+     */
+    function depositForUser(address _user, uint256 _amount) external nonReentrant returns (uint256) {
+        require(_amount > 0, "Stake: amount must be greater than 0");
+        require(_user != address(0), "Stake: user is the zero address");
+
+        // Update reward variables
+        updateRewards();
+
+        // Get user info for the specified user, not msg.sender
+        UserInfo storage user = userInfo[_user];
+
+        // Transfer tokens from the sender to this contract
+        stakingToken.safeTransferFrom(msg.sender, address(this), _amount);
+
+        // Update specified user's staking amount
+        user.amount += _amount;
+        totalStaked += _amount;
+
+        // Update specified user's reward debt
+        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+
+        // Emit deposit event for the specified user
+        emit Deposited(_user, _amount);
+        
+        return _amount;
+    }
 
     /**
      * @dev Claims USDC rewards for the caller
@@ -308,5 +342,71 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // Return the function selector to confirm transaction was accepted
         return IERC1363Spender.onApprovalReceived.selector;
+    }
+
+    /// @notice Event emitted when tokens are migrated to a new staking contract
+    event Migrated(address indexed user, address indexed newContract, uint256 amount);
+
+    /**
+     * @dev Migrates user's entire stake to a new staking contract
+     * This function will:
+     * 1. Claim all pending rewards first
+     * 2. Withdraw all staked tokens
+     * 3. Approve the new staking contract to spend the tokens
+     * 4. Use depositForUser in the new contract to deposit on behalf of the user
+     * All in a single transaction
+     * @param _newStakingContract Address of the new Stake contract to migrate to
+     * @return migratedAmount Amount of tokens migrated to the new contract
+     */
+    function migrate(address _newStakingContract) external nonReentrant returns (uint256) {
+        require(_newStakingContract != address(0), "Stake: new contract is the zero address");
+        require(_newStakingContract != address(this), "Stake: cannot migrate to self");
+        
+        // Ensure the target is a valid Stake contract with the same staking token
+        Stake newStakingContract = Stake(_newStakingContract);
+        require(address(newStakingContract.stakingToken()) == address(stakingToken), 
+                "Stake: incompatible staking token");
+        
+        // Get user's current staked amount
+        UserInfo storage user = userInfo[msg.sender];
+        uint256 stakedAmount = user.amount;
+        require(stakedAmount > 0, "Stake: no tokens to migrate");
+        
+        // 1. Claim all pending rewards
+        claim();
+        
+        // 2. Withdraw all staked tokens (without claiming again since we just did)
+        // Update user staking amount
+        user.amount = 0;
+        totalStaked -= stakedAmount;
+        
+        // Update reward debt
+        user.rewardDebt = 0;
+        
+        // 3. Approve the new contract to spend our tokens (staking tokens are now in this contract)
+        stakingToken.approve(_newStakingContract, stakedAmount);
+        
+        // 4. Call depositForUser on the new contract to deposit directly with proper attribution
+        bool migrationSuccess = false;
+        try newStakingContract.depositForUser(msg.sender, stakedAmount) {
+            migrationSuccess = true;
+        } catch {
+            // If the depositForUser call fails, we need to transfer tokens back to the user
+            migrationSuccess = false;
+        }
+        
+        if (!migrationSuccess) {
+            // If migration failed, return tokens to the user's wallet
+            stakingToken.safeTransfer(msg.sender, stakedAmount);
+        }
+        
+        // Clear the approval regardless of outcome
+        stakingToken.approve(_newStakingContract, 0);
+        
+        // Emit events for withdrawal and migration
+        emit Withdrawn(msg.sender, stakedAmount);
+        emit Migrated(msg.sender, _newStakingContract, stakedAmount);
+        
+        return stakedAmount;
     }
 }
