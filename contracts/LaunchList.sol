@@ -302,6 +302,9 @@ contract LaunchList is Ownable {
                     return true;
                 }
                 return false;
+            } else if (isAddressOnLaunchList(from) && isPoolOnLaunchList(to)) {
+                // If sender is a launch list address and recipient is a launch list pool, allow transaction
+                return true;
             } else if (isPoolOnLaunchList(from) && isPoolOnLaunchList(to)) {
                 // If both sender and recipient are launch list pools, allow transaction
                 // to support routers and solvers
