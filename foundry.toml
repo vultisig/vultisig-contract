@@ -10,5 +10,8 @@ remappings = [
     '@openzeppelin/contracts/=lib/openzeppelin-contracts/contracts/',
 ]
 
+[etherscan]
+mainnet = {key = "${ETHERSCAN_API_KEY}", chain = "mainnet" }
+
 [rpc_endpoints]
 mainnet = "https://ethereum-rpc.publicnode.com"

@@ -7,18 +7,29 @@ import {LaunchList} from "../contracts/LaunchList.sol";
 
 contract DeployToken is Script {
     function run() external {
-        // Get deployment private key from environment
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
-        address deployer = vm.addr(deployerPrivateKey);
+        // Get the Ledger deployer address
+        // Default to the first account (index 0) on the Ledger with Legacy HD path
+        uint ledgerIndex = vm.envOr("LEDGER_INDEX", uint(0));
+        string memory hdPath = "m/44'/60'/0'/0";
+        address deployer = vm.envAddress("LEDGER_ADDRESS");
+        
+        if (deployer == address(0)) {
+            console2.log("Error: No deployer address provided. Set LEDGER_ADDRESS environment variable.");
+            return;
+        }
+        
+        console2.log("Using Ledger deployer address:", deployer);
+        console2.log("Using Ledger account index:", ledgerIndex);
+        console2.log("Using Ledger HD path:", hdPath);
 
-        // Start broadcasting transactions
-        vm.startBroadcast(deployerPrivateKey);
+        // Start broadcasting transactions using the Ledger with legacy HD path
+        vm.startBroadcast(deployer);
 
         // 1. Deploy LaunchList contract
         LaunchList launchList = new LaunchList(deployer);
 
         // 2. Deploy Token contract
-        ERC20 token = new ERC20("Base Token", "BT");
+        ERC20 token = new ERC20("Vultisig Token", "VULT");
 
         // 3. Configure token with launch list
         token.setLaunchListContract(address(launchList));
