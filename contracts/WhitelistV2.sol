@@ -65,7 +65,7 @@ contract WhitelistV2 is Ownable {
     event PoolWhitelisted(address indexed pool);
     event PoolRemovedFromWhitelist(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
-    event EthSpent(address indexed user, uint256 amount);
+    event EthSpent(address indexed user, uint256 amount, uint256 total);
     event PhaseLimitsUpdated(
         uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
     );
@@ -290,17 +290,21 @@ contract WhitelistV2 is Ownable {
         // Phase 1 & 2: Whitelisted pools trading with ETH limits
         if (currentPhase == Phase.LIMITED_POOL_TRADING || currentPhase == Phase.EXTENDED_POOL_TRADING) {
             // If recipient is a whitelisted pool, check ETH spending limits
-            if (isPoolWhitelisted(from)) {
+            if (isPoolWhitelisted(from) && isUserWhitelisted(to)) {
                 uint256 ethValue = getEthValueForToken(amount);
                 uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1EthLimit : phase2EthLimit;
 
-                if (userEthSpent[from] + ethValue <= limit) {
+                if (userEthSpent[to] + ethValue <= limit) {
                     // Update user's ETH spent if the transaction is going through
-                    userEthSpent[from] += ethValue;
-                    emit EthSpent(from, ethValue);
+                    userEthSpent[to] += ethValue;
+                    emit EthSpent(to, ethValue, userEthSpent[to]);
                     return true;
                 }
                 return false;
+            } else if (isPoolWhitelisted(from) && isPoolWhitelisted(to)) {
+                // If both sender and recipient are whitelisted pools, allow transaction
+                // to support routers and solvers
+                return true;
             }
 
             // If sending to unwhitelisted address that's not a pool, deny transaction
