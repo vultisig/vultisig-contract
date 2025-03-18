@@ -36,6 +36,15 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
     /// @notice Total tokens staked
     uint256 public totalStaked;
+    
+    /// @notice Last time rewards were updated
+    uint256 public lastRewardUpdateTime;
+    
+    /// @notice Decay factor for releasing rewards (default is 10 = 10%)
+    uint256 public rewardDecayFactor = 10;
+    
+    /// @notice Minimum time between reward updates in seconds (default is 1 day)
+    uint256 public minRewardUpdateDelay = 1 days;
 
     /// @notice User staking information
     struct UserInfo {
@@ -58,6 +67,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
     event RouterSet(address indexed router);
     event Migrated(address indexed user, address indexed newContract, uint256 amount);
+    event RewardDecayFactorSet(uint256 newFactor);
+    event MinRewardUpdateDelaySet(uint256 newDelay);
 
     /**
      * @dev Constructor sets the staking and reward tokens
@@ -75,36 +86,54 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     /**
      * @dev Update reward variables with current token balances
      * Must be called before any deposit or withdrawal
+     * Includes decay function to gradually release rewards
      */
     function updateRewards() public {
+        _updateRewards();
+    }
+    
+    /**
+     * @dev Internal function to handle reward updates based on configured parameters
+     * The owner can configure minRewardUpdateDelay and rewardDecayFactor to control behavior
+     */
+    function _updateRewards() internal {
         if (totalStaked == 0) {
             lastRewardBalance = rewardToken.balanceOf(address(this));
+            lastRewardUpdateTime = block.timestamp;
             return;
         }
 
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
+        bool timeDelayMet = (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay);
 
-        // If there are new rewards
-        if (currentRewardBalance > lastRewardBalance) {
-            uint256 newRewards = currentRewardBalance - lastRewardBalance;
-
-            // Update accRewardPerShare based on new rewards
+        // If there are new rewards and enough time has passed (or delay is set to 0)
+        if (currentRewardBalance > lastRewardBalance && (timeDelayMet || minRewardUpdateDelay == 0)) {
+            uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
+            
+            // Apply decay factor (if decay factor is 1, all rewards are released)
+            uint256 releasedRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
+            
+            // Update accRewardPerShare based on released rewards
             // Scaled by 1e12 to avoid precision loss when dividing small numbers
-            accRewardPerShare += (newRewards * 1e12) / totalStaked;
+            accRewardPerShare += (releasedRewards * 1e12) / totalStaked;
 
-            // Update the last reward balance
-            lastRewardBalance = currentRewardBalance;
+            // Update the last reward balance - only account for released rewards
+            lastRewardBalance += releasedRewards;
+            
+            // Update the last update time
+            lastRewardUpdateTime = block.timestamp;
 
-            emit RewardsUpdated(accRewardPerShare, newRewards);
+            emit RewardsUpdated(accRewardPerShare, releasedRewards);
         }
     }
 
     /**
-     * @dev Returns pending rewards for a user
+     * @dev Returns pending rewards for a user with option to ignore delay and decay
      * @param _user Address of the user
+     * @param _ignoreDelayAndDecay If true, calculates rewards ignoring delay and decay constraints
      * @return Pending reward amount
      */
-    function pendingRewards(address _user) public view returns (uint256) {
+    function pendingRewards(address _user, bool _ignoreDelayAndDecay) public view returns (uint256) {
         UserInfo storage user = userInfo[_user];
         if (user.amount == 0 || totalStaked == 0) {
             return 0;
@@ -114,15 +143,35 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         uint256 additionalRewards = 0;
         uint256 newAccRewardPerShare = accRewardPerShare;
 
-        // Calculate additional rewards since last update
+        // Check if there are additional rewards
         if (currentRewardBalance > lastRewardBalance && totalStaked > 0) {
-            additionalRewards = currentRewardBalance - lastRewardBalance;
-            newAccRewardPerShare += (additionalRewards * 1e12) / totalStaked;
+            uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
+            
+            // Apply decay and time check based on configured parameters
+            if (_ignoreDelayAndDecay) {
+                additionalRewards = totalNewRewards;
+            } else if (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay || minRewardUpdateDelay == 0) {
+                // Apply decay - only consider a fraction of the new rewards unless decay factor is 1
+                additionalRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
+            }
+            
+            if (additionalRewards > 0) {
+                newAccRewardPerShare += (additionalRewards * 1e12) / totalStaked;
+            }
         }
 
         // Calculate pending rewards using the formula:
         // pending = (user.amount * accRewardPerShare) - user.rewardDebt
         return (user.amount * newAccRewardPerShare) / 1e12 - user.rewardDebt;
+    }
+    
+    /**
+     * @dev Returns pending rewards for a user with default decay and delay settings
+     * @param _user Address of the user
+     * @return Pending reward amount
+     */
+    function pendingRewards(address _user) public view returns (uint256) {
+        return pendingRewards(_user, false);
     }
 
     /**
@@ -412,6 +461,28 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(_router != address(0), "Stake: router is the zero address");
         defaultRouter = _router;
         emit RouterSet(_router);
+    }
+    
+    /**
+     * @dev Sets the reward decay factor - determines what fraction of new rewards are released
+     * e.g. factor of 10 means 1/10 (10%) of rewards are released each update
+     * Setting factor to 1 releases all rewards at once (no decay)
+     * @param _newFactor The new decay factor (must be at least 1)
+     */
+    function setRewardDecayFactor(uint256 _newFactor) external onlyOwner {
+        require(_newFactor > 0, "Stake: decay factor must be greater than 0");
+        rewardDecayFactor = _newFactor;
+        emit RewardDecayFactorSet(_newFactor);
+    }
+    
+    /**
+     * @dev Sets the minimum time between reward updates
+     * Setting to 0 means rewards can be updated at any time
+     * @param _newDelay The new minimum delay in seconds
+     */
+    function setMinRewardUpdateDelay(uint256 _newDelay) external onlyOwner {
+        minRewardUpdateDelay = _newDelay;
+        emit MinRewardUpdateDelaySet(_newDelay);
     }
 
     /**

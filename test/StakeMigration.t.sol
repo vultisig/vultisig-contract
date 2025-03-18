@@ -96,7 +96,13 @@ contract StakeMigrationTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(oldStake), REWARD_AMOUNT);
         
-        // Update rewards to make them claimable
+        // Configure rewards for immediate updates with no decay for testing
+        vm.startPrank(owner);
+        oldStake.setMinRewardUpdateDelay(0); // No delay between updates
+        oldStake.setRewardDecayFactor(1);    // No decay (release all rewards)
+        vm.stopPrank();
+        
+        // Update rewards - with the parameters set above, all rewards will be processed
         oldStake.updateRewards();
         
         // Check initial pending rewards
