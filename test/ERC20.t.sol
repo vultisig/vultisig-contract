@@ -2,8 +2,8 @@
 pragma solidity ^0.8.28;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {TokenWhitelisted} from "../contracts/extensions/TokenWhitelisted.sol";
-import {WhitelistV2} from "../contracts/WhitelistV2.sol";
+import {ERC20} from "../contracts/extensions/ERC20.sol";
+import {LaunchList} from "../contracts/LaunchList.sol";
 import {IERC1363Receiver} from "../contracts/interfaces/IERC1363Receiver.sol";
 import {IERC1363Spender} from "../contracts/interfaces/IERC1363Spender.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -33,9 +33,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(MintParams calldata params)
-        external
-        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(
+        MintParams calldata params
+    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 // Uniswap V3 Router Interface
@@ -64,10 +64,12 @@ contract MockERC1363Receiver is IERC1363Receiver {
         shouldReturnWrongSelector = _shouldReturnWrongSelector;
     }
 
-    function onTransferReceived(address operator, address from, uint256 value, bytes calldata data)
-        external
-        returns (bytes4)
-    {
+    function onTransferReceived(
+        address operator,
+        address from,
+        uint256 value,
+        bytes calldata data
+    ) external returns (bytes4) {
         if (shouldRevert) {
             revert("MockERC1363Receiver: revert");
         }
@@ -103,15 +105,15 @@ contract MockERC1363Spender is IERC1363Spender {
     }
 }
 
-contract TokenWhitelistedTest is Test {
+contract ERC20Test is Test {
     using SafeERC20 for IERC20;
 
     // The fork
     uint256 mainnetFork;
 
     // Contracts under test
-    TokenWhitelisted public tokenA; // Token on chain A
-    WhitelistV2 public whitelist;
+    ERC20 public tokenA; // Token on chain A
+    LaunchList public launchList;
 
     // Uniswap contracts
     IUniswapV3Factory public uniswapFactory;
@@ -126,14 +128,14 @@ contract TokenWhitelistedTest is Test {
     address public owner;
     address public user1;
     address public user2;
-    address public nonWhitelistedUser;
+    address public nonLaunchListUser;
     MockERC1363Receiver public mockReceiver;
     MockERC1363Spender public mockSpender;
 
-    // Define pool addresses for whitelist tests
+    // Define pool addresses for launch list tests
     address public pool1;
     address public pool2;
-    address public nonWhitelistedPool;
+    address public nonLaunchListPool;
 
     uint256 public constant INITIAL_SUPPLY = 100_000_000 * 1e18;
 
@@ -181,10 +183,10 @@ contract TokenWhitelistedTest is Test {
         owner = address(0x9999999999999999999999999999999999999999);
         user1 = address(0x1);
         user2 = address(0x2);
-        nonWhitelistedUser = address(0x3);
+        nonLaunchListUser = address(0x3);
         pool1 = address(0x4);
         pool2 = address(0x5);
-        nonWhitelistedPool = address(0x6);
+        nonLaunchListPool = address(0x6);
 
         // Get Uniswap V3 contracts from mainnet
         uniswapFactory = IUniswapV3Factory(UNISWAP_V3_FACTORY);
@@ -199,31 +201,31 @@ contract TokenWhitelistedTest is Test {
 
         // Get WETH by wrapping ETH
         vm.startPrank(owner);
-        (bool success,) = WETH_ADDRESS.call{value: 10000 ether}("");
+        (bool success, ) = WETH_ADDRESS.call{value: 10000 ether}("");
         require(success, "Failed to get WETH");
         vm.stopPrank();
 
         // Get USDC by impersonating a whale
-        // Deploy whitelist with the real Uniswap pool
-        whitelist = new WhitelistV2(owner);
+        // Deploy launch list with the real Uniswap pool
+        launchList = new LaunchList(owner);
 
-        // Configure whitelist with the real Uniswap pool
+        // Configure launch list with the real Uniswap pool
         vm.startPrank(owner);
 
-        // Whitelist users
-        whitelist.whitelistUser(owner);
-        whitelist.whitelistUser(user1);
-        whitelist.whitelistUser(user2);
+        // add users to launch list
+        launchList.launchListAddress(owner);
+        launchList.launchListAddress(user1);
+        launchList.launchListAddress(user2);
 
-        // Whitelist pools and routers
-        whitelist.whitelistPool(pool1);
-        whitelist.whitelistPool(pool2);
-        whitelist.whitelistPool(address(swapRouter));
+        // add pools to launch list
+        launchList.launchListPool(pool1);
+        launchList.launchListPool(pool2);
+        launchList.launchListPool(address(swapRouter));
 
-        // Deploy tokens on both chains with real whitelist
-        tokenA = new TokenWhitelisted("Test Token", "TEST");
+        // Deploy tokens on both chains with real launch list
+        tokenA = new ERC20("Test Token", "TEST");
 
-        tokenA.setWhitelistContract(address(whitelist));
+        tokenA.setLaunchListContract(address(launchList));
 
         // Deploy mock receiver and spender
         mockReceiver = new MockERC1363Receiver();
@@ -255,10 +257,10 @@ contract TokenWhitelistedTest is Test {
 
         // Initialize the pool with a price (assume 1 tokenA = 0.0001 WETH)
         IUniswapV3Pool tokenAPool = IUniswapV3Pool(tokenAPoolAddress);
-        whitelist.setUniswapV3OraclePool(address(tokenAPoolAddress));
+        launchList.setUniswapV3OraclePool(address(tokenAPoolAddress));
 
-        // Add to whitelist
-        whitelist.whitelistPool(tokenAPoolAddress);
+        // Add to launch list
+        launchList.launchListPool(tokenAPoolAddress);
 
         // sqrt(0.0001) * 2^96
         uint160 sqrtPriceX96 = uint160(79232123187620800136);
@@ -288,14 +290,14 @@ contract TokenWhitelistedTest is Test {
         // Mint position
         positionManager.mint(params);
 
-        whitelist.setPhase(WhitelistV2.Phase.PUBLIC);
+        launchList.setPhase(LaunchList.Phase.PUBLIC);
 
         vm.stopPrank();
 
         // Fund users with ETH for gas
         vm.deal(user1, 100 ether);
         vm.deal(user2, 100 ether);
-        vm.deal(nonWhitelistedUser, 100 ether);
+        vm.deal(nonLaunchListUser, 100 ether);
         vm.deal(pool1, 100 ether);
         vm.deal(pool2, 100 ether);
     }
@@ -516,31 +518,31 @@ contract TokenWhitelistedTest is Test {
         tokenA.approveAndCall(address(mockSpender), amount);
     }
 
-    // ==================== Whitelist Tests ====================
+    // ==================== Launch List Tests ====================
 
-    function testWhitelistPhase0Restrictions() public {
-        // Set whitelist phase
+    function testLaunchListPhase0Restrictions() public {
+        // Set launch list phase
         vm.startPrank(owner);
-        whitelist.setPhase(WhitelistV2.Phase.WHITELIST_ONLY);
+        launchList.setPhase(LaunchList.Phase.LAUNCH_LIST_ONLY);
 
-        // Test: Whitelisted user can send to another whitelisted user
+        // Test: Launch listed user can send to another launch listed user
         bool success = tokenA.transfer(user1, 100 ether);
         assertTrue(success);
 
-        assertFalse(whitelist.isUserWhitelisted(nonWhitelistedUser));
-        assertFalse(whitelist.isPoolWhitelisted(nonWhitelistedUser));
+        assertFalse(launchList.isAddressOnLaunchList(nonLaunchListUser));
+        assertFalse(launchList.isPoolOnLaunchList(nonLaunchListPool));
 
-        // Test: Whitelisted user cannot send to non-whitelisted user
-        vm.expectRevert("Transaction not allowed by whitelist");
-        tokenA.transfer(nonWhitelistedUser, 100 ether);
+        // Test: Launch listed user cannot send to non-launch listed user
+        vm.expectRevert("Transaction not allowed by launch list");
+        tokenA.transfer(nonLaunchListUser, 100 ether);
     }
 
-    function testRealUniswapPoolWithWhitelist() public {
-        // This test demonstrates interaction with a real Uniswap pool while respecting whitelist restrictions
+    function testRealUniswapPoolWithLaunchList() public {
+        // This test demonstrates interaction with a real Uniswap pool while respecting launch list restrictions
 
-        // Set whitelist to Phase 1 (Limited trading)
+        // Set launch list to Phase 1 (Limited trading)
         vm.prank(owner);
-        whitelist.setPhase(WhitelistV2.Phase.LIMITED_POOL_TRADING);
+        launchList.setPhase(LaunchList.Phase.LIMITED_POOL_TRADING);
 
         // User1 needs WETH to buy tokens
         deal(WETH_ADDRESS, user1, 2 ether); // Give user1 2 ETH worth of WETH
@@ -585,9 +587,9 @@ contract TokenWhitelistedTest is Test {
     function testExtendedPoolTradingWithRealUniswap() public {
         // Test the increased limit in Phase 2
 
-        // Set whitelist to Phase 2 (Extended trading)
+        // Set launch list to Phase 2 (Extended trading)
         vm.prank(owner);
-        whitelist.setPhase(WhitelistV2.Phase.EXTENDED_POOL_TRADING);
+        launchList.setPhase(LaunchList.Phase.EXTENDED_POOL_TRADING);
 
         // Give user1 enough WETH to test the 4 ETH limit
         deal(WETH_ADDRESS, user1, 5 ether);
@@ -647,15 +649,15 @@ contract TokenWhitelistedTest is Test {
     function testPublicPhaseNoRestrictions() public {
         // Test that in PUBLIC phase, there are no restrictions
 
-        // Set whitelist to PUBLIC phase
+        // Set launch list to PUBLIC phase
         vm.prank(owner);
-        whitelist.setPhase(WhitelistV2.Phase.PUBLIC);
+        launchList.setPhase(LaunchList.Phase.PUBLIC);
 
-        // Give non-whitelisted user some WETH
-        deal(WETH_ADDRESS, nonWhitelistedUser, 10 ether);
+        // Give non-launch listed user some WETH
+        deal(WETH_ADDRESS, nonLaunchListUser, 10 ether);
 
-        // Non-whitelisted user should be able to swap any amount
-        vm.startPrank(nonWhitelistedUser);
+        // Non-launch listed user should be able to swap any amount
+        vm.startPrank(nonLaunchListUser);
         IERC20(WETH_ADDRESS).approve(address(swapRouter), 10 ether);
 
         // Execute swap with a large amount (should succeed in PUBLIC phase)
@@ -663,7 +665,7 @@ contract TokenWhitelistedTest is Test {
             tokenIn: WETH_ADDRESS,
             tokenOut: address(tokenA),
             fee: FEE_TIER,
-            recipient: nonWhitelistedUser,
+            recipient: nonLaunchListUser,
             deadline: block.timestamp + 60,
             amountIn: 5 ether, // Large amount, should work in PUBLIC phase
             amountOutMinimum: 0,
@@ -671,7 +673,7 @@ contract TokenWhitelistedTest is Test {
         });
 
         uint256 amountOut = swapRouter.exactInputSingle(swapParams);
-        assertTrue(amountOut > 0, "Swap failed for non-whitelisted user in PUBLIC phase");
+        assertTrue(amountOut > 0, "Swap failed for non-launch listed user in PUBLIC phase");
 
         vm.stopPrank();
     }
