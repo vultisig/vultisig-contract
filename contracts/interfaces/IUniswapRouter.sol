@@ -23,4 +23,15 @@ interface IUniswapRouter {
         address to,
         uint256 deadline
     ) external returns (uint256[] memory amounts);
+    
+    /**
+     * @dev Given an input amount of an asset and an array of token addresses, calculates all subsequent maximum output token amounts
+     * @param amountIn The amount of input tokens
+     * @param path An array of token addresses (path[0] = input token, path[path.length-1] = output token)
+     * @return amounts The input token amount and all subsequent output token amounts
+     */
+    function getAmountsOut(
+        uint256 amountIn,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts);
 }

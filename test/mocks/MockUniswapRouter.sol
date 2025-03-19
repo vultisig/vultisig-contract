@@ -55,4 +55,27 @@ contract MockUniswapRouter is IUniswapRouter {
         
         return amounts;
     }
+    
+    /**
+     * @dev Mock implementation of getAmountsOut
+     * @param amountIn The amount of input tokens
+     * @param path Array of token addresses representing the path
+     * @return amounts The input amount and calculated output amounts based on exchange rate
+     */
+    function getAmountsOut(
+        uint256 amountIn,
+        address[] calldata path
+    ) external view override returns (uint256[] memory amounts) {
+        require(path.length >= 2, "Invalid path");
+        
+        // Calculate output amount based on exchange rate
+        uint256 amountOut = amountIn * exchangeRate;
+        
+        // Create and populate the amounts array
+        amounts = new uint256[](path.length);
+        amounts[0] = amountIn;
+        amounts[path.length - 1] = amountOut;
+        
+        return amounts;
+    }
 }
