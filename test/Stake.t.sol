@@ -281,6 +281,8 @@ contract StakeTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), 100 ether);
 
+        vm.warp(block.timestamp + 1 days);
+
         stake.updateRewards();
 
         // New staker joins
@@ -316,6 +318,8 @@ contract StakeTest is Test {
         // Add rewards
         vm.prank(owner);
         rewardToken.transfer(address(stake), 100 ether);
+
+        vm.warp(block.timestamp + 1 days);
 
         stake.updateRewards();
 
