@@ -172,4 +172,92 @@ contract StakeSweeperTest is Test {
 
         vm.stopPrank();
     }
+
+    function test_ReinvestZeroBalance() public {
+        vm.startPrank(user);
+
+        // Try to reinvest when there are no reward tokens in the contract
+        vm.expectRevert("StakeSweeper: amount to swap must be greater than 0");
+        sweeper.reinvest(address(tokenToSweep), user);
+
+        vm.stopPrank();
+    }
+
+    function test_SwapWithFailedQuote() public {
+        uint256 amountToSweep = 100 ether;
+        address recipient = makeAddr("recipient");
+
+        // Setup router to fail quote
+        router.setFailQuote(true);
+
+        vm.startPrank(owner);
+        tokenToSweep.transfer(address(sweeper), amountToSweep);
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        // Should still succeed with minimum amount out of 1
+        uint256 amountOut = sweeper.sweep(address(tokenToSweep), recipient);
+        assertGt(amountOut, 0);
+        vm.stopPrank();
+    }
+
+    function test_SwapWithInvalidQuoteLength() public {
+        uint256 amountToSweep = 100 ether;
+        address recipient = makeAddr("recipient");
+
+        // Setup router to return invalid quote length
+        router.setInvalidQuoteLength(true);
+
+        vm.startPrank(owner);
+        tokenToSweep.transfer(address(sweeper), amountToSweep);
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        // Should still succeed with minimum amount out of 1
+        uint256 amountOut = sweeper.sweep(address(tokenToSweep), recipient);
+        assertGt(amountOut, 0);
+        vm.stopPrank();
+    }
+
+    function test_RevertSetRouterZeroAddress() public {
+        vm.startPrank(owner);
+        vm.expectRevert("StakeSweeper: router is zero address");
+        sweeper.setRouter(address(0));
+        vm.stopPrank();
+    }
+
+    function test_SwapWithDifferentMinOutPercentages() public {
+        uint256 amountToSweep = 100 ether;
+        address recipient = makeAddr("recipient");
+
+        vm.startPrank(owner);
+        tokenToSweep.transfer(address(sweeper), amountToSweep);
+
+        // Test with different min out percentages
+        sweeper.setMinOutPercentage(95); // Higher percentage
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        uint256 amountOut = sweeper.sweep(address(tokenToSweep), recipient);
+        assertEq(amountOut, amountToSweep * router.exchangeRate());
+        vm.stopPrank();
+
+        // Setup for next test
+        vm.startPrank(owner);
+        tokenToSweep.transfer(address(sweeper), amountToSweep);
+        sweeper.setMinOutPercentage(1); // Minimum percentage
+        vm.stopPrank();
+
+        vm.startPrank(user);
+        amountOut = sweeper.sweep(address(tokenToSweep), recipient);
+        assertEq(amountOut, amountToSweep * router.exchangeRate());
+        vm.stopPrank();
+    }
+
+    function test_RevertSetMinOutPercentageNonOwner() public {
+        vm.startPrank(user);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user));
+        sweeper.setMinOutPercentage(95);
+        vm.stopPrank();
+    }
 }
