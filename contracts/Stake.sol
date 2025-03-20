@@ -534,25 +534,33 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Transfer reward token to sweeper
         rewardToken.safeTransfer(address(sweeper), rewardAmount);
 
-        // Execute swap from reward tokens to staking tokens
-        uint256 stakingTokensReceived = sweeper.reinvest(address(stakingToken), address(this));
+        // Check staking token balance before reinvest
+        uint256 stakingTokenBalanceBefore = stakingToken.balanceOf(address(this));
 
-        require(stakingTokensReceived > 0, "Stake: swap did not yield any staking tokens");
+        // Execute swap from reward tokens to staking tokens
+        sweeper.reinvest(address(stakingToken), address(this));
+
+        // Check staking token balance after reinvest
+        uint256 stakingTokenBalanceAfter = stakingToken.balanceOf(address(this));
+
+        uint256 stakingTokenBalanceDelta = stakingTokenBalanceAfter - stakingTokenBalanceBefore;
+
+        require(stakingTokenBalanceDelta > 0, "Stake: swap did not yield any staking tokens");
 
         // Step 4: Re-use deposit logic to add tokens to user's stake
         // No need to transfer tokens as they're already in this contract
 
         // Update user staking amount
-        user.amount += stakingTokensReceived;
-        totalStaked += stakingTokensReceived;
+        user.amount += stakingTokenBalanceDelta;
+        totalStaked += stakingTokenBalanceDelta;
 
         // Update user reward debt
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
 
-        emit Deposited(msg.sender, stakingTokensReceived);
-        emit Reinvested(msg.sender, rewardAmount, stakingTokensReceived);
+        emit Deposited(msg.sender, stakingTokenBalanceDelta);
+        emit Reinvested(msg.sender, rewardAmount, stakingTokenBalanceDelta);
 
-        return stakingTokensReceived;
+        return stakingTokenBalanceDelta;
     }
 
     /**
