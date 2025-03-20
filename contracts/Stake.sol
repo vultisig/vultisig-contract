@@ -72,10 +72,13 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     uint256 private constant VESTING_PERIOD = 24 hours;
 
     /// @notice The amount currently being vested
-    uint256 public vestingAmount;
+    uint256 private vestingAmount;
 
     /// @notice The timestamp when the current vesting period started
-    uint256 public lastVestingStartTime;
+    uint256 private lastVestingStartTime;
+
+    // Add a new state variable to track distributed rewards
+    uint256 private distributedVestedAmount;
 
     /**
      * @dev Constructor sets the staking and reward tokens
@@ -91,53 +94,62 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @dev Update reward variables with current token balances
-     * Must be called before any deposit or withdrawal
-     * Includes decay function to gradually release rewards
-     */
-    function updateRewards() public {
-        _updateRewards();
-    }
-
-    /**
      * @dev Internal function to handle reward updates based on configured parameters
-     * The owner can configure minRewardUpdateDelay and rewardDecayFactor to control behavior
+     * Returns the newly vested amount that was processed
      */
-    function _updateRewards() internal {
+    function _updateRewards() internal returns (uint256) {
         if (totalStaked == 0) {
-            lastRewardBalance = rewardToken.balanceOf(address(this)) - getUnvestedAmount();
+            lastRewardBalance = rewardToken.balanceOf(address(this));
             lastRewardUpdateTime = block.timestamp;
-            return;
+            return 0;
         }
 
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
-        uint256 vestedAmount = getVestedAmount();
-        uint256 unvestedAmount = getUnvestedAmount();
+        uint256 currentTimestamp = block.timestamp;
+        uint256 newlyVestedAmount = 0;
 
-        // Process any vested rewards first
-        if (vestedAmount > 0) {
-            accRewardPerShare += (vestedAmount * 1e12) / totalStaked;
-            lastRewardBalance += vestedAmount;
+        // First, process any existing vesting
+        if (vestingAmount > 0) {
+            uint256 timeSinceLastVesting = currentTimestamp - lastVestingStartTime;
+            uint256 totalVestedAmount;
 
-            // Clear the vested amount from vesting
-            vestingAmount = unvestedAmount;
-            // Don't reset lastVestingStartTime as remaining unvested amount
-            // continues vesting from original start time
+            if (timeSinceLastVesting >= VESTING_PERIOD) {
+                // Fully vested
+                totalVestedAmount = vestingAmount;
+                newlyVestedAmount = totalVestedAmount - distributedVestedAmount;
+
+                // Reset vesting state
+                vestingAmount = 0;
+                lastVestingStartTime = 0;
+                distributedVestedAmount = 0;
+            } else {
+                // Partially vested
+                totalVestedAmount = (vestingAmount * timeSinceLastVesting) / VESTING_PERIOD;
+                newlyVestedAmount = totalVestedAmount > distributedVestedAmount
+                    ? totalVestedAmount - distributedVestedAmount
+                    : 0;
+                distributedVestedAmount = totalVestedAmount;
+            }
+
+            if (newlyVestedAmount > 0) {
+                accRewardPerShare += (newlyVestedAmount * 1e12) / totalStaked;
+                emit RewardsUpdated(accRewardPerShare, newlyVestedAmount);
+            }
         }
 
-        // Check for new rewards after processing vested ones
-        uint256 newRewards = currentRewardBalance - lastRewardBalance - unvestedAmount;
+        // Check for new rewards
+        uint256 newRewards = currentRewardBalance > lastRewardBalance ? currentRewardBalance - lastRewardBalance : 0;
+
+        // Update lastRewardBalance to current balance
+        // Start new vesting period for new rewards
         if (newRewards > 0) {
-            // Start new vesting period for new rewards only
-            vestingAmount = unvestedAmount + newRewards;
-            lastVestingStartTime = block.timestamp;
-
-            emit VestingStarted(newRewards, block.timestamp);
+            vestingAmount = newRewards;
+            lastVestingStartTime = currentTimestamp;
+            distributedVestedAmount = 0;
+            emit VestingStarted(newRewards, currentTimestamp);
         }
 
-        if (vestedAmount > 0) {
-            emit RewardsUpdated(accRewardPerShare, vestedAmount);
-        }
+        return newlyVestedAmount;
     }
 
     /**
@@ -157,7 +169,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         uint256 newAccRewardPerShare = accRewardPerShare;
         if (availableBalance > lastRewardBalance) {
-            uint256 additionalRewards = availableBalance - lastRewardBalance;
             uint256 vestedAmount = getVestedAmount();
             if (vestedAmount > 0) {
                 newAccRewardPerShare += (vestedAmount * 1e12) / totalStaked;
@@ -174,10 +185,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param _amount Amount of tokens to deposit
      */
     function _deposit(address _depositor, address _user, uint256 _amount) internal {
-        // Update reward variables
-        updateRewards();
+        // Update reward variables first
+        _updateRewards();
 
-        // Get user info
         UserInfo storage user = userInfo[_user];
 
         // Transfer tokens from the depositor to this contract
@@ -235,8 +245,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return Amount of rewards claimed
      */
     function _claim(address _recipient) internal returns (uint256) {
-        // Update rewards first to ensure all pending rewards are accounted for
-        updateRewards();
+        // Update rewards first
+        _updateRewards();
 
         // Claim rewards internally and get the amount
         uint256 rewardAmount = _claimRewards(msg.sender);
@@ -265,7 +275,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             _claim(_user);
         } else {
             // If not claiming rewards, still update reward variables
-            updateRewards();
+            _updateRewards();
         }
 
         // Update user staking amount
@@ -306,7 +316,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return Amount of USDC withdrawn
      */
     function withdrawUnclaimedRewards() external onlyOwner nonReentrant returns (uint256) {
-        updateRewards();
+        _updateRewards();
 
         // Calculate unclaimed USDC (current balance - last processed balance - unvested amount)
         uint256 currentBalance = rewardToken.balanceOf(address(this));
@@ -486,7 +496,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         );
 
         // Update the lastRewardBalance to account for the new rewards
-        updateRewards();
+        _updateRewards();
 
         // Emit the sweep event
         emit TokenSwept(_token, balance, amountOut);
@@ -505,7 +515,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(defaultRouter != address(0), "Stake: default router not set");
 
         // Step 1: Update rewards to ensure all pending rewards are accounted for
-        updateRewards();
+        _updateRewards();
 
         // Step 2: Check if user has pending rewards to reinvest
         UserInfo storage user = userInfo[msg.sender];
@@ -666,5 +676,10 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // Calculate vested amount linearly
         return (vestingAmount * timeSinceLastVesting) / VESTING_PERIOD;
+    }
+
+    // Add new getter functions
+    function getCurrentVestingInfo() external view returns (uint256 amount, uint256 startTime) {
+        return (vestingAmount, lastVestingStartTime);
     }
 }

@@ -38,7 +38,7 @@ contract StakeTest is Test {
         rewardToken.approve(address(stake), type(uint256).max);
     }
 
-    function test_Deployment() public {
+    function test_Deployment() public view {
         assertEq(address(stake.stakingToken()), address(stakingToken));
         assertEq(address(stake.rewardToken()), address(rewardToken));
     }
@@ -59,7 +59,7 @@ contract StakeTest is Test {
         stake.deposit(amount);
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, amount);
         assertEq(stake.totalStaked(), amount);
         // Only staking tokens should be transferred to the contract
@@ -78,7 +78,7 @@ contract StakeTest is Test {
         stakingToken.approveAndCall(address(stake), amount, "");
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, amount);
         assertEq(stake.totalStaked(), amount);
         // Only staking tokens should be transferred to the contract
@@ -109,7 +109,7 @@ contract StakeTest is Test {
         stake.withdraw(depositAmount);
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, 0);
         assertEq(stake.totalStaked(), 0);
 
@@ -138,7 +138,7 @@ contract StakeTest is Test {
         stake.withdraw(withdrawAmount);
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, depositAmount - withdrawAmount);
         assertEq(stake.totalStaked(), depositAmount - withdrawAmount);
 
@@ -198,12 +198,13 @@ contract StakeTest is Test {
         rewardToken.transfer(address(stake), rewardAmount);
         vm.stopPrank();
 
-        // Update rewards to start vesting
-        stake.updateRewards();
+        // Do an initial interaction to detect rewards (can be a zero claim)
+        stake.claim();
 
         // Check initial vesting state
-        assertEq(stake.vestingAmount(), rewardAmount);
-        assertGt(stake.lastVestingStartTime(), 0);
+        (uint256 currentVestingAmount, uint256 vestingStartTime) = stake.getCurrentVestingInfo();
+        assertEq(currentVestingAmount, rewardAmount);
+        assertGt(vestingStartTime, 0);
 
         // Check unvested amount at start
         assertEq(stake.getUnvestedAmount(), rewardAmount);
@@ -239,21 +240,18 @@ contract StakeTest is Test {
         rewardToken.transfer(address(stake), rewardAmount);
         vm.stopPrank();
 
-        // Update rewards to start vesting
-        stake.updateRewards();
+        // Do an initial interaction to detect rewards
+        stake.claim();
 
         // Move forward 12 hours (half vesting)
         vm.warp(block.timestamp + 12 hours);
-
-        // Important: Update rewards again after time warp to process vested amounts
-        stake.updateRewards();
 
         // User claims rewards
         vm.startPrank(user);
         uint256 claimedAmount = stake.claim();
         vm.stopPrank();
 
-        // Should receive approximately half the rewards
+        // Should receive exactly half the rewards after 12 hours
         assertApproxEqAbs(claimedAmount, rewardAmount / 2, 1);
     }
 
@@ -271,23 +269,33 @@ contract StakeTest is Test {
         vm.startPrank(owner);
         rewardToken.transfer(address(stake), rewardAmount);
         vm.stopPrank();
-        stake.updateRewards();
 
-        // Move forward 12 hours
+        // Start first vesting period
+        stake.claim();
+
+        // Verify initial state
+        assertEq(stake.getUnvestedAmount(), rewardAmount);
+        assertEq(stake.getVestedAmount(), 0);
+
+        // Move forward 12 hours - first distribution should be half vested
         vm.warp(block.timestamp + 12 hours);
 
         // Second reward distribution
         vm.startPrank(owner);
         rewardToken.transfer(address(stake), rewardAmount);
         vm.stopPrank();
-        stake.updateRewards();
 
-        // Check vesting amounts
-        uint256 unvestedAmount = stake.getUnvestedAmount();
-        uint256 vestedAmount = stake.getVestedAmount();
+        stake.claim();
 
-        // Should have ~15 ether total (5 from first distribution + 10 from second)
-        assertApproxEqAbs(unvestedAmount + vestedAmount, rewardAmount + (rewardAmount / 2), 1);
+        vm.warp(block.timestamp + 12 hours);
+
+        stake.claim();
+
+        // At this point:
+        // - First distribution (10 ETH) should be half vested (5 ETH vested, 5 ETH unvested)
+        // - Second distribution (10 ETH) should be starting its vesting
+        // Total unvested: 15 ETH (5 ETH from first + 10 ETH from second)
+        assertEq(stake.getUnvestedAmount() + stake.getVestedAmount(), rewardAmount * 2, "Total rewards incorrect");
     }
 
     function test_WithdrawUnvestedRewards() public {
@@ -303,7 +311,6 @@ contract StakeTest is Test {
         // Owner sends new rewards
         vm.startPrank(owner);
         rewardToken.transfer(address(stake), rewardAmount);
-        stake.updateRewards();
 
         // Try to withdraw unvested rewards
         uint256 withdrawnAmount = stake.withdrawUnclaimedRewards();

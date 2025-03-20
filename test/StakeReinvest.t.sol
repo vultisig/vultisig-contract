@@ -70,14 +70,11 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
-        // Update rewards to start vesting
-        stake.updateRewards();
+        // Do an initial interaction to detect rewards
+        stake.claim();
 
         // Wait for full vesting period
         vm.warp(block.timestamp + 24 hours);
-
-        // Update rewards again to process vested rewards
-        stake.updateRewards();
 
         // Now check pending rewards
         uint256 pending = stake.pendingRewards(user);
@@ -144,9 +141,6 @@ contract StakeReinvestTest is Test {
         stakingToken.approve(address(noRouterStake), STAKE_AMOUNT);
         noRouterStake.deposit(STAKE_AMOUNT);
 
-        // Update rewards
-        noRouterStake.updateRewards();
-
         // Try to reinvest with no router set
         vm.expectRevert("Stake: default router not set");
         noRouterStake.reinvest();
@@ -179,9 +173,6 @@ contract StakeReinvestTest is Test {
         // Owner sends rewards to stake contract
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
-
-        // Update rewards to make them claimable
-        stake.updateRewards();
 
         // User claims rewards to themselves first
         vm.prank(user);
@@ -221,12 +212,11 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT * 2);
 
-        // Update rewards to start vesting
-        stake.updateRewards();
+        // Do an initial interaction to detect rewards
+        stake.claim();
 
         // Wait for full vesting period
         vm.warp(block.timestamp + 24 hours);
-        stake.updateRewards(); // Process vested rewards
 
         // Set minOutPercentage for testing
         vm.prank(owner);
@@ -240,12 +230,11 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
-        // Update rewards to start vesting new rewards
-        stake.updateRewards();
+        // Do an initial interaction to detect new rewards
+        stake.claim();
 
         // Wait for new rewards to vest
         vm.warp(block.timestamp + 24 hours);
-        stake.updateRewards(); // Process new vested rewards
 
         // There should be new rewards available
         uint256 pendingAfter = stake.pendingRewards(user);
@@ -279,12 +268,11 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
-        // Update rewards to start vesting
-        stake.updateRewards();
+        // Do an initial interaction to detect rewards
+        stake.claim();
 
         // Wait for full vesting period
         vm.warp(block.timestamp + 24 hours);
-        stake.updateRewards(); // Process the vested rewards
 
         // Set minOutPercentage for testing
         vm.prank(owner);

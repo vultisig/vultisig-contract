@@ -52,7 +52,7 @@ contract StakeMigrationTest is Test {
 
         // Simulate passage of time with rewards accrual
         // First update rewards to establish baseline
-        oldStake.updateRewards();
+        // oldStake.updateRewards();
     }
 
     function test_MigrateBasic() public {
@@ -96,9 +96,11 @@ contract StakeMigrationTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(oldStake), REWARD_AMOUNT);
 
-        // Update rewards - with the parameters set above, all rewards will be processed
-        oldStake.updateRewards();
+        // Do an initial interaction to detect rewards
+        oldStake.claim();
 
+        // Wait for rewards to vest
+        vm.warp(block.timestamp + 24 hours);
         // Check initial pending rewards
         uint256 pendingRewards = oldStake.pendingRewards(user);
         assertTrue(pendingRewards > 0, "User should have pending rewards");
