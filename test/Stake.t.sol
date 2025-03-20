@@ -59,7 +59,7 @@ contract StakeTest is Test {
         stake.deposit(amount);
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, amount);
         assertEq(stake.totalStaked(), amount);
         // Only staking tokens should be transferred to the contract
@@ -78,7 +78,7 @@ contract StakeTest is Test {
         stakingToken.approveAndCall(address(stake), amount, "");
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, amount);
         assertEq(stake.totalStaked(), amount);
         // Only staking tokens should be transferred to the contract
@@ -109,7 +109,7 @@ contract StakeTest is Test {
         stake.withdraw(depositAmount);
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, 0);
         assertEq(stake.totalStaked(), 0);
 
@@ -138,7 +138,7 @@ contract StakeTest is Test {
         stake.withdraw(withdrawAmount);
 
         // userInfo returns a tuple where the first element is the amount
-        (uint256 stakedAmount,) = stake.userInfo(user);
+        (uint256 stakedAmount, ) = stake.userInfo(user);
         assertEq(stakedAmount, depositAmount - withdrawAmount);
         assertEq(stake.totalStaked(), depositAmount - withdrawAmount);
 
@@ -180,6 +180,134 @@ contract StakeTest is Test {
         vm.startPrank(user);
         vm.expectRevert("Stake: caller is not the staking token");
         stake.onApprovalReceived(user, 100 ether, "");
+        vm.stopPrank();
+    }
+
+    function test_LinearVesting() public {
+        uint256 depositAmount = 100 ether;
+        uint256 rewardAmount = 10 ether;
+
+        // Setup: User deposits tokens
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Owner sends new rewards
+        vm.startPrank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+        vm.stopPrank();
+
+        // Update rewards to start vesting
+        stake.updateRewards();
+
+        // Check initial vesting state
+        assertEq(stake.vestingAmount(), rewardAmount);
+        assertGt(stake.lastVestingStartTime(), 0);
+
+        // Check unvested amount at start
+        assertEq(stake.getUnvestedAmount(), rewardAmount);
+        assertEq(stake.getVestedAmount(), 0);
+
+        // Move forward 12 hours (half the vesting period)
+        vm.warp(block.timestamp + 12 hours);
+
+        // Check half vested amounts
+        assertApproxEqAbs(stake.getUnvestedAmount(), rewardAmount / 2, 1);
+        assertApproxEqAbs(stake.getVestedAmount(), rewardAmount / 2, 1);
+
+        // Move forward to complete vesting
+        vm.warp(block.timestamp + 12 hours);
+
+        // Check fully vested state
+        assertEq(stake.getUnvestedAmount(), 0);
+        assertEq(stake.getVestedAmount(), rewardAmount);
+    }
+
+    function test_RewardsClaimDuringVesting() public {
+        uint256 depositAmount = 100 ether;
+        uint256 rewardAmount = 10 ether;
+
+        // Setup: User deposits tokens
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Owner sends new rewards
+        vm.startPrank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+        vm.stopPrank();
+
+        // Update rewards to start vesting
+        stake.updateRewards();
+
+        // Move forward 12 hours (half vesting)
+        vm.warp(block.timestamp + 12 hours);
+
+        // User claims rewards
+        vm.startPrank(user);
+        uint256 claimedAmount = stake.claim();
+        vm.stopPrank();
+
+        // Should receive approximately half the rewards
+        assertApproxEqAbs(claimedAmount, rewardAmount / 2, 1);
+        assertApproxEqAbs(rewardToken.balanceOf(user), rewardAmount / 2, 1);
+    }
+
+    function test_MultipleRewardDistributions() public {
+        uint256 depositAmount = 100 ether;
+        uint256 rewardAmount = 10 ether;
+
+        // Setup: User deposits tokens
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // First reward distribution
+        vm.startPrank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+        vm.stopPrank();
+        stake.updateRewards();
+
+        // Move forward 12 hours
+        vm.warp(block.timestamp + 12 hours);
+
+        // Second reward distribution
+        vm.startPrank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+        vm.stopPrank();
+        stake.updateRewards();
+
+        // Check vesting amounts
+        uint256 unvestedAmount = stake.getUnvestedAmount();
+        uint256 vestedAmount = stake.getVestedAmount();
+
+        // Should have ~15 ether total (5 from first distribution + 10 from second)
+        assertApproxEqAbs(unvestedAmount + vestedAmount, rewardAmount + (rewardAmount / 2), 1);
+    }
+
+    function test_WithdrawUnvestedRewards() public {
+        uint256 depositAmount = 100 ether;
+        uint256 rewardAmount = 10 ether;
+
+        // Setup: User deposits tokens
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Owner sends new rewards
+        vm.startPrank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+        stake.updateRewards();
+
+        // Try to withdraw unvested rewards
+        uint256 withdrawnAmount = stake.withdrawUnclaimedRewards();
+
+        // Should be able to withdraw only unvested amount
+        assertEq(withdrawnAmount, 0, "Should not be able to withdraw vesting rewards");
         vm.stopPrank();
     }
 }
