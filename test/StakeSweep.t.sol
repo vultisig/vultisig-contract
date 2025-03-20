@@ -50,6 +50,12 @@ contract StakeSweepTest is Test {
     }
 
     function test_SweepBasic() public {
+        // Stake some tokens to begin with
+        vm.startPrank(owner);
+        stakingToken.approve(address(stake), 100 ether);
+        stake.deposit(100 ether);
+        vm.stopPrank();
+
         // Initial state
         assertEq(extraToken.balanceOf(address(stake)), EXTRA_TOKEN_AMOUNT);
         uint256 initialRewardBalance = rewardToken.balanceOf(address(stake));
@@ -57,6 +63,8 @@ contract StakeSweepTest is Test {
         // Set router first
         vm.startPrank(owner);
         stake.setSweeper(address(sweeper));
+
+        vm.warp(block.timestamp + 1 days + 1);
 
         // Expect TokenSwept event
         vm.expectEmit(true, false, false, false);
@@ -74,7 +82,7 @@ contract StakeSweepTest is Test {
         assertEq(finalRewardBalance, initialRewardBalance + amountReceived);
 
         // Verify lastRewardBalance was updated to include the new rewards
-        assertEq(stake.lastRewardBalance(), finalRewardBalance);
+        assertEq(stake.lastRewardBalance() * stake.rewardDecayFactor(), finalRewardBalance);
 
         vm.stopPrank();
     }

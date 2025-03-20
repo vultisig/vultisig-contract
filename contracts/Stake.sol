@@ -103,7 +103,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      */
     function _updateRewards() internal {
         if (totalStaked == 0) {
-            lastRewardBalance = rewardToken.balanceOf(address(this));
             lastRewardUpdateTime = block.timestamp;
             return;
         }
