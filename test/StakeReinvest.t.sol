@@ -70,44 +70,34 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
+        // Update rewards to start vesting
         stake.updateRewards();
 
-        // Wait for full vesting
+        // Wait for full vesting period
         vm.warp(block.timestamp + 24 hours);
+
+        // Update rewards again to process vested rewards
         stake.updateRewards();
 
         // Now check pending rewards
         uint256 pending = stake.pendingRewards(user);
         assertGt(pending, 0, "User should have pending rewards");
 
-        // Log balances before reinvesting
-        console.log("Stake contract reward balance:", rewardToken.balanceOf(address(stake)));
-
         // Get user stake amount before reinvesting
         uint256 userStakeBefore = stake.userAmount(user);
 
-        // Execute reinvestment as the user
-        vm.startPrank(user);
-        // Set min out percentage to something reasonable for our mock router
-        // (In practice this would be done by the contract owner)
-        vm.stopPrank();
+        // Set min out percentage
         vm.prank(owner);
         stake.setMinOutPercentage(80);
 
+        // Execute reinvestment
         vm.prank(user);
         uint256 reinvestedAmount = stake.reinvest();
-        console.log("Reinvested amount:", reinvestedAmount);
-
-        // Log final balances
-        console.log("Final staked amount:", stake.userAmount(user));
-
-        // After reinvestment
-        uint256 userStakeAfter = stake.userAmount(user);
 
         // Verify results
         assertGt(reinvestedAmount, 0, "Should have reinvested some tokens");
         assertEq(
-            userStakeAfter,
+            stake.userAmount(user),
             userStakeBefore + reinvestedAmount,
             "Stake should have increased by reinvested amount"
         );
@@ -227,16 +217,16 @@ contract StakeReinvestTest is Test {
         stake.deposit(STAKE_AMOUNT);
         vm.stopPrank();
 
-        // Owner sends rewards to stake contract
+        // Owner sends first batch of rewards
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT * 2);
 
-        // Set immediate reward release for testing
-        vm.startPrank(owner);
-        stake.setMinOutPercentage(80); // Set minOutPercentage for testing
-        vm.stopPrank();
-
+        // Update rewards to start vesting
         stake.updateRewards();
+
+        // Wait for full vesting period
+        vm.warp(block.timestamp + 24 hours);
+        stake.updateRewards(); // Process vested rewards
 
         // Set minOutPercentage for testing
         vm.prank(owner);
@@ -250,8 +240,12 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
-        // Update rewards again to make new rewards available
+        // Update rewards to start vesting new rewards
         stake.updateRewards();
+
+        // Wait for new rewards to vest
+        vm.warp(block.timestamp + 24 hours);
+        stake.updateRewards(); // Process new vested rewards
 
         // There should be new rewards available
         uint256 pendingAfter = stake.pendingRewards(user);
@@ -285,8 +279,12 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
-        // Update rewards to calculate distribution
+        // Update rewards to start vesting
         stake.updateRewards();
+
+        // Wait for full vesting period
+        vm.warp(block.timestamp + 24 hours);
+        stake.updateRewards(); // Process the vested rewards
 
         // Set minOutPercentage for testing
         vm.prank(owner);
@@ -294,15 +292,10 @@ contract StakeReinvestTest is Test {
 
         // Check that pending rewards are available
         uint256 pendingRewards = stake.pendingRewards(user);
-
-        // Make sure we have rewards to reinvest
         assertGt(pendingRewards, 0, "User should have pending rewards");
 
-        // Prepare for log recording
-
+        // Record logs and execute reinvestment
         vm.recordLogs();
-
-        // Execute reinvestment as the user
         vm.prank(user);
         uint256 reinvestedAmount = stake.reinvest();
 

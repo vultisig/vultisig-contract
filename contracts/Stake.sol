@@ -111,26 +111,32 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         }
 
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
+        uint256 vestedAmount = getVestedAmount();
         uint256 unvestedAmount = getUnvestedAmount();
-        uint256 availableBalance = currentRewardBalance - unvestedAmount;
 
-        // If there are new rewards
-        if (availableBalance > lastRewardBalance) {
-            uint256 newRewards = availableBalance - lastRewardBalance;
+        // Process any vested rewards first
+        if (vestedAmount > 0) {
+            accRewardPerShare += (vestedAmount * 1e12) / totalStaked;
+            lastRewardBalance += vestedAmount;
 
-            // Start new vesting period for new rewards
-            vestingAmount = newRewards;
+            // Clear the vested amount from vesting
+            vestingAmount = unvestedAmount;
+            // Don't reset lastVestingStartTime as remaining unvested amount
+            // continues vesting from original start time
+        }
+
+        // Check for new rewards after processing vested ones
+        uint256 newRewards = currentRewardBalance - lastRewardBalance - unvestedAmount;
+        if (newRewards > 0) {
+            // Start new vesting period for new rewards only
+            vestingAmount = unvestedAmount + newRewards;
             lastVestingStartTime = block.timestamp;
 
-            // Update accRewardPerShare with vested rewards
-            uint256 vestedRewards = getVestedAmount();
-            if (vestedRewards > 0) {
-                accRewardPerShare += (vestedRewards * 1e12) / totalStaked;
-                lastRewardBalance = availableBalance;
-            }
-
-            emit RewardsUpdated(accRewardPerShare, vestedRewards);
             emit VestingStarted(newRewards, block.timestamp);
+        }
+
+        if (vestedAmount > 0) {
+            emit RewardsUpdated(accRewardPerShare, vestedAmount);
         }
     }
 
