@@ -30,8 +30,5 @@ interface IUniswapRouter {
      * @param path An array of token addresses (path[0] = input token, path[path.length-1] = output token)
      * @return amounts The input token amount and all subsequent output token amounts
      */
-    function getAmountsOut(uint256 amountIn, address[] calldata path)
-        external
-        view
-        returns (uint256[] memory amounts);
+    function getAmountsOut(uint256 amountIn, address[] memory path) external view returns (uint256[] memory amounts);
 }
