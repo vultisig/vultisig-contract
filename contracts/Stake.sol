@@ -42,6 +42,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         uint256 rewardDebt; // Reward debt as per Masterchef logic
     }
 
+    uint128 constant REWARD_DECAY_FACTOR_SCALING = 1e26;
+
     /// @notice VULT token being staked
     IERC20 public immutable stakingToken;
 
@@ -51,7 +53,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     /// @notice Sweeper contract for sweeping tokens
     StakeSweeper public sweeper;
 
-    /// @notice Accumulated reward tokens per share, scaled by 1e12
+    /// @notice Accumulated reward tokens per share, scaled by REWARD_DECAY_FACTOR_SCALING
     uint256 public accRewardPerShare;
 
     /// @notice Last processed reward balance
@@ -116,8 +118,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             uint256 releasedRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
 
             // Update accRewardPerShare based on released rewards
-            // Scaled by 1e12 to avoid precision loss when dividing small numbers
-            accRewardPerShare += (releasedRewards * 1e12) / totalStaked;
+            // Scaled by REWARD_DECAY_FACTOR_SCALING to avoid precision loss when dividing small numbers
+            accRewardPerShare += (releasedRewards * REWARD_DECAY_FACTOR_SCALING) / totalStaked;
 
             // Update the last reward balance - only account for released rewards
             lastRewardBalance += releasedRewards;
@@ -155,12 +157,12 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             }
 
             if (additionalRewards > 0) {
-                newAccRewardPerShare += (additionalRewards * 1e12) / totalStaked;
+                newAccRewardPerShare += (additionalRewards * REWARD_DECAY_FACTOR_SCALING) / totalStaked;
             }
         }
 
         // Calculate pending rewards using the formula:
-        return (user.amount * newAccRewardPerShare) / 1e12 - user.rewardDebt;
+        return (user.amount * newAccRewardPerShare) / REWARD_DECAY_FACTOR_SCALING - user.rewardDebt;
     }
 
     /**
@@ -184,7 +186,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         totalStaked += _amount;
 
         // Update user reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+        user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING;
 
         emit Deposited(_user, _amount);
     }
@@ -269,7 +271,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         totalStaked -= _amount;
 
         // Update reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+        user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING;
 
         // Transfer staking tokens back to the user
         stakingToken.safeTransfer(_user, _amount);
@@ -472,7 +474,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // Step 2: Check if user has pending rewards to reinvest
         UserInfo storage user = userInfo[userAddress];
-        uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
+        uint256 pending = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING - user.rewardDebt;
         require(pending > 0, "Stake: no rewards to reinvest");
 
         // Step 3: Claim rewards internally
@@ -505,7 +507,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         totalStaked += stakingTokenBalanceDelta;
 
         // Update user reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+        user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING;
 
         emit Deposited(userAddress, stakingTokenBalanceDelta);
         emit Reinvested(userAddress, rewardAmount, stakingTokenBalanceDelta);
@@ -520,7 +522,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      */
     function _claimRewards(address _user) internal returns (uint256) {
         UserInfo storage user = userInfo[_user];
-        uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
+        uint256 pending = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING - user.rewardDebt;
 
         if (pending == 0) {
             return 0;
@@ -534,7 +536,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         lastRewardBalance -= rewardAmount;
 
         // Update reward debt to reflect that rewards have been claimed
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+        user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING;
 
         return rewardAmount;
     }
