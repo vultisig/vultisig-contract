@@ -175,4 +175,99 @@ contract StakeMigrationTest is Test {
 
         vm.stopPrank();
     }
+
+    function test_MultipleUsersMigration() public {
+        // Create additional users
+        address user2 = makeAddr("user2");
+        address user3 = makeAddr("user3");
+        uint256 user2Deposit = 200 ether;
+        uint256 user3Deposit = 300 ether;
+
+        // Setup initial stakes for additional users
+        vm.startPrank(owner);
+        stakingToken.transfer(user2, USER_BALANCE);
+        stakingToken.transfer(user3, USER_BALANCE);
+        vm.stopPrank();
+
+        // User2 deposits
+        vm.startPrank(user2);
+        stakingToken.approve(address(oldStake), user2Deposit);
+        oldStake.deposit(user2Deposit);
+        vm.stopPrank();
+
+        // User3 deposits
+        vm.startPrank(user3);
+        stakingToken.approve(address(oldStake), user3Deposit);
+        oldStake.deposit(user3Deposit);
+        vm.stopPrank();
+
+        // Add rewards and configure for immediate distribution
+        vm.startPrank(owner);
+        rewardToken.transfer(address(oldStake), REWARD_AMOUNT * 3);
+        oldStake.setMinRewardUpdateDelay(0);
+        oldStake.setRewardDecayFactor(1);
+        vm.stopPrank();
+
+        // Update rewards to distribute them
+        oldStake.updateRewards();
+
+        // Store initial reward balances and pending rewards
+        uint256 user1InitialRewards = rewardToken.balanceOf(user);
+        uint256 user2InitialRewards = rewardToken.balanceOf(user2);
+        uint256 user3InitialRewards = rewardToken.balanceOf(user3);
+
+        uint256 user1PendingRewards = oldStake.pendingRewards(user);
+        uint256 user2PendingRewards = oldStake.pendingRewards(user2);
+        uint256 user3PendingRewards = oldStake.pendingRewards(user3);
+
+        // Verify that rewards are proportional to stake amounts
+        assertGt(user1PendingRewards, 0);
+        assertGt(user2PendingRewards, user1PendingRewards); // user2 has 2x the stake of user1
+        assertGt(user3PendingRewards, user2PendingRewards); // user3 has 1.5x the stake of user2
+
+        // Users migrate one by one
+        vm.prank(user);
+        uint256 migratedAmount1 = oldStake.migrate(address(newStake));
+
+        vm.prank(user2);
+        uint256 migratedAmount2 = oldStake.migrate(address(newStake));
+
+        vm.prank(user3);
+        uint256 migratedAmount3 = oldStake.migrate(address(newStake));
+
+        // Verify migrated amounts
+        assertEq(migratedAmount1, DEPOSIT_AMOUNT);
+        assertEq(migratedAmount2, user2Deposit);
+        assertEq(migratedAmount3, user3Deposit);
+
+        // Verify final stakes in new contract
+        (uint256 newStake1,) = newStake.userInfo(user);
+        (uint256 newStake2,) = newStake.userInfo(user2);
+        (uint256 newStake3,) = newStake.userInfo(user3);
+
+        assertEq(newStake1, DEPOSIT_AMOUNT);
+        assertEq(newStake2, user2Deposit);
+        assertEq(newStake3, user3Deposit);
+
+        // Verify exact reward amounts received
+        assertEq(
+            rewardToken.balanceOf(user) - user1InitialRewards,
+            user1PendingRewards,
+            "User1 didn't receive correct reward amount"
+        );
+        assertEq(
+            rewardToken.balanceOf(user2) - user2InitialRewards,
+            user2PendingRewards,
+            "User2 didn't receive correct reward amount"
+        );
+        assertEq(
+            rewardToken.balanceOf(user3) - user3InitialRewards,
+            user3PendingRewards,
+            "User3 didn't receive correct reward amount"
+        );
+
+        // Verify total staked amount in new contract
+        assertEq(newStake.totalStaked(), DEPOSIT_AMOUNT + user2Deposit + user3Deposit);
+        assertEq(oldStake.totalStaked(), 0);
+    }
 }
