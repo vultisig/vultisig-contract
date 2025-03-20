@@ -51,6 +51,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     /// @notice Sweeper contract for sweeping tokens
     StakeSweeper public sweeper;
 
+    /// @notice Min amount out percentage for reinvest swaps (1-100)
+    uint8 public minOutPercentage = 90; // Default 90% to protect from slippage
+
     /// @notice Accumulated reward tokens per share, scaled by 1e12
     uint256 public accRewardPerShare;
 
@@ -231,16 +234,19 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return Amount of rewards claimed
      */
     function _claim(address _recipient) internal returns (uint256) {
+        // Store caller address to prevent issues with msg.sender after external calls
+        address caller = msg.sender;
+        
         // Update rewards first to ensure all pending rewards are accounted for
         updateRewards();
 
         // Claim rewards internally and get the amount
-        uint256 rewardAmount = _claimRewards(msg.sender);
+        uint256 rewardAmount = _claimRewards(caller);
 
         if (rewardAmount > 0) {
-            // Transfer the tokens to the recipient
+            // Transfer the tokens to the recipient - this is an external call, do it last
             rewardToken.safeTransfer(_recipient, rewardAmount);
-            emit RewardClaimed(msg.sender, rewardAmount);
+            emit RewardClaimed(caller, rewardAmount);
         }
 
         return rewardAmount;
@@ -298,6 +304,47 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     }
 
     /**
+     * @dev Allows the owner to withdraw all unclaimed USDC rewards
+     * @return Amount of USDC withdrawn
+     */
+    function withdrawUnclaimedRewards() external onlyOwner nonReentrant returns (uint256) {
+        // Update rewards to ensure all accounting is current
+        updateRewards();
+
+        // Calculate unclaimed USDC (current balance - last processed balance)
+        uint256 currentBalance = rewardToken.balanceOf(address(this));
+        uint256 unclaimedBalance = currentBalance - lastRewardBalance;
+
+        uint256 withdrawAmount = unclaimedBalance;
+        if (withdrawAmount > 0) {
+            rewardToken.safeTransfer(owner(), withdrawAmount);
+        }
+
+        emit OwnerWithdrawnRewards(withdrawAmount);
+        return withdrawAmount;
+    }
+
+    /**
+     * @dev Allows the owner to withdraw all extra staking tokens that are not part of totalStaked
+     * @return Amount of tokens withdrawn
+     */
+    function withdrawExtraStakingTokens() external onlyOwner nonReentrant returns (uint256) {
+        // Calculate extra tokens (current balance - tracked total)
+        uint256 currentBalance = stakingToken.balanceOf(address(this));
+        require(currentBalance > totalStaked, "Stake: no extra tokens available");
+
+        uint256 extraTokens = currentBalance - totalStaked;
+
+        uint256 withdrawAmount = extraTokens;
+        if (withdrawAmount > 0) {
+            stakingToken.safeTransfer(owner(), withdrawAmount);
+        }
+
+        emit OwnerWithdrawnExtraTokens(withdrawAmount);
+        return withdrawAmount;
+    }
+
+    /**
      * @dev Implementation of IERC1363Spender onApprovalReceived to handle approveAndCall
      * This function is called when a user calls approveAndCall on the token contract
      * @param owner The address which called approveAndCall function and approved the tokens
@@ -333,6 +380,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(_newStakingContract != address(0), "Stake: new contract is the zero address");
         require(_newStakingContract != address(this), "Stake: cannot migrate to self");
 
+        // Store user address to prevent issues with msg.sender after external calls
+        address userAddress = msg.sender;
+
         // Ensure the target is a valid Stake contract with the same staking token
         Stake newStakingContract = Stake(_newStakingContract);
         require(
@@ -340,44 +390,46 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         );
 
         // Get user's current staked amount
-        UserInfo storage user = userInfo[msg.sender];
+        UserInfo storage user = userInfo[userAddress];
         uint256 stakedAmount = user.amount;
         require(stakedAmount > 0, "Stake: no tokens to migrate");
 
         // 1. Claim all pending rewards
-        _claim(msg.sender);
+        _claim(userAddress);
 
-        // 2. Withdraw all staked tokens
+        // 2. Withdraw all staked tokens - IMPORTANT: Complete all state changes before external calls
         // Update user staking amount
         user.amount = 0;
         totalStaked -= stakedAmount;
 
         // Update reward debt
         user.rewardDebt = 0;
+        
+        // Emit withdrawal event - do this before external calls
+        emit Withdrawn(userAddress, stakedAmount);
 
         // 3. Approve the new contract to spend our tokens (staking tokens are now in this contract)
         stakingToken.approve(_newStakingContract, stakedAmount);
 
         // 4. Call depositForUser on the new contract to deposit directly with proper attribution
         bool migrationSuccess = false;
-        try newStakingContract.depositForUser(msg.sender, stakedAmount) {
+        try newStakingContract.depositForUser(userAddress, stakedAmount) returns (uint256) {
             migrationSuccess = true;
         } catch {
             // If the depositForUser call fails, we need to transfer tokens back to the user
             migrationSuccess = false;
         }
 
-        if (!migrationSuccess) {
-            // If migration failed, return tokens to the user's wallet
-            stakingToken.safeTransfer(msg.sender, stakedAmount);
-        }
-
         // Clear the approval regardless of outcome
         stakingToken.approve(_newStakingContract, 0);
 
-        // Emit events for withdrawal and migration
-        emit Withdrawn(msg.sender, stakedAmount);
-        emit Migrated(msg.sender, _newStakingContract, stakedAmount);
+        if (!migrationSuccess) {
+            // If migration failed, return tokens to the user's wallet
+            stakingToken.safeTransfer(userAddress, stakedAmount);
+        }
+        
+        // Emit migration event
+        emit Migrated(userAddress, _newStakingContract, stakedAmount);
 
         return stakedAmount;
     }
@@ -390,6 +442,16 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(_sweeper != address(0), "Stake: sweeper is the zero address");
         sweeper = StakeSweeper(_sweeper);
         emit SweeperSet(_sweeper);
+    }
+
+    /**
+     * @dev Sets the minimum percentage of output tokens expected (slippage protection)
+     * @param _percentage The percentage (1-100)
+     */
+    function setMinOutPercentage(uint8 _percentage) external onlyOwner {
+        require(_percentage > 0 && _percentage <= 100, "Stake: percentage must be between 1-100");
+        minOutPercentage = _percentage;
+        emit MinOutPercentageSet(_percentage);
     }
 
     /**
@@ -462,28 +524,31 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      */
     function reinvest() external nonReentrant returns (uint256) {
         require(address(sweeper) != address(0), "Stake: sweeper not set");
+        
+        // Store caller address to prevent issues with msg.sender after external calls
+        address caller = msg.sender;
 
         // Step 1: Update rewards to ensure all pending rewards are accounted for
         updateRewards();
 
         // Step 2: Check if user has pending rewards to reinvest
-        UserInfo storage user = userInfo[msg.sender];
+        UserInfo storage user = userInfo[caller];
         uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
         require(pending > 0, "Stake: no rewards to reinvest");
 
         // Step 3: Claim rewards internally
-        uint256 rewardAmount = _claimRewards(msg.sender);
+        uint256 rewardAmount = _claimRewards(caller);
 
         // Emit RewardClaimed event
-        emit RewardClaimed(msg.sender, rewardAmount);
+        emit RewardClaimed(caller, rewardAmount);
 
-        // Transfer reward token to sweeper
+        // Transfer reward token to sweeper - external call
         rewardToken.safeTransfer(address(sweeper), rewardAmount);
 
         // Check staking token balance before reinvest
         uint256 stakingTokenBalanceBefore = stakingToken.balanceOf(address(this));
 
-        // Execute swap from reward tokens to staking tokens
+        // Execute swap from reward tokens to staking tokens - external call
         sweeper.reinvest(address(stakingToken), address(this));
 
         // Check staking token balance after reinvest
@@ -503,8 +568,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Update user reward debt
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
 
-        emit Deposited(msg.sender, stakingTokenBalanceDelta);
-        emit Reinvested(msg.sender, rewardAmount, stakingTokenBalanceDelta);
+        emit Deposited(caller, stakingTokenBalanceDelta);
+        emit Reinvested(caller, rewardAmount, stakingTokenBalanceDelta);
 
         return stakingTokenBalanceDelta;
     }
