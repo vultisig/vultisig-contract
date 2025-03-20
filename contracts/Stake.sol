@@ -6,7 +6,7 @@ import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "./interfaces/IERC1363Spender.sol";
-import "./interfaces/IUniswapRouter.sol";
+import "./StakeSweeper.sol";
 
 /**
  * @title Stake
@@ -18,7 +18,7 @@ import "./interfaces/IUniswapRouter.sol";
  */
 contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     using SafeERC20 for IERC20;
-    
+
     // ================= Events =================
     event Deposited(address indexed user, uint256 amount);
     event Withdrawn(address indexed user, uint256 amount);
@@ -28,29 +28,29 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     event OwnerWithdrawnRewards(uint256 amount);
     event OwnerWithdrawnExtraTokens(uint256 amount);
     event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
-    event RouterSet(address indexed router);
+    event SweeperSet(address indexed sweeper);
     event Migrated(address indexed user, address indexed newContract, uint256 amount);
     event RewardDecayFactorSet(uint256 newFactor);
     event MinRewardUpdateDelaySet(uint256 newDelay);
     event Reinvested(address indexed user, uint256 rewardAmount, uint256 stakingTokensReceived);
     event MinOutPercentageSet(uint8 percentage);
-    
+
     // ================= State Variables =================
     /// @notice User staking information
     struct UserInfo {
         uint256 amount; // How many tokens the user has staked
         uint256 rewardDebt; // Reward debt as per Masterchef logic
     }
-    
+
     /// @notice VULT token being staked
     IERC20 public immutable stakingToken;
 
     /// @notice USDC token for rewards
     IERC20 public immutable rewardToken;
-    
-    /// @notice Default Uniswap-like router for sweeping tokens
-    address public defaultRouter;
-    
+
+    /// @notice Sweeper contract for sweeping tokens
+    StakeSweeper public sweeper;
+
     /// @notice Min amount out percentage for reinvest swaps (1-100)
     uint8 public minOutPercentage = 90; // Default 90% to protect from slippage
 
@@ -62,13 +62,13 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
     /// @notice Total tokens staked
     uint256 public totalStaked;
-    
+
     /// @notice Last time rewards were updated
     uint256 public lastRewardUpdateTime;
-    
+
     /// @notice Decay factor for releasing rewards (default is 10 = 10%)
     uint256 public rewardDecayFactor = 10;
-    
+
     /// @notice Minimum time between reward updates in seconds (default is 1 day)
     uint256 public minRewardUpdateDelay = 1 days;
 
@@ -96,7 +96,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function updateRewards() public {
         _updateRewards();
     }
-    
+
     /**
      * @dev Internal function to handle reward updates based on configured parameters
      * The owner can configure minRewardUpdateDelay and rewardDecayFactor to control behavior
@@ -114,17 +114,17 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // If there are new rewards and enough time has passed (or delay is set to 0)
         if (currentRewardBalance > lastRewardBalance && (timeDelayMet || minRewardUpdateDelay == 0)) {
             uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
-            
+
             // Apply decay factor (if decay factor is 1, all rewards are released)
             uint256 releasedRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
-            
+
             // Update accRewardPerShare based on released rewards
             // Scaled by 1e12 to avoid precision loss when dividing small numbers
             accRewardPerShare += (releasedRewards * 1e12) / totalStaked;
 
             // Update the last reward balance - only account for released rewards
             lastRewardBalance += releasedRewards;
-            
+
             // Update the last update time
             lastRewardUpdateTime = block.timestamp;
 
@@ -150,13 +150,13 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Check if there are additional rewards
         if (currentRewardBalance > lastRewardBalance && totalStaked > 0) {
             uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
-            
+
             // Apply decay and time check based on configured parameters
             if (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay || minRewardUpdateDelay == 0) {
                 // Apply decay - only consider a fraction of the new rewards unless decay factor is 1
                 additionalRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
             }
-            
+
             if (additionalRewards > 0) {
                 newAccRewardPerShare += (additionalRewards * 1e12) / totalStaked;
             }
@@ -207,7 +207,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         _deposit(msg.sender, _user, _amount);
         return _amount;
     }
-    
+
     /**
      * @dev Allows a user to deposit tokens without using approveAndCall
      * User must approve tokens first
@@ -226,7 +226,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function claim() public nonReentrant returns (uint256) {
         return _claim(msg.sender);
     }
-    
+
     /**
      * @dev Internal function for claiming rewards
      * This is used by functions that already have nonReentrant modifier
@@ -239,7 +239,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // Claim rewards internally and get the amount
         uint256 rewardAmount = _claimRewards(msg.sender);
-        
+
         if (rewardAmount > 0) {
             // Transfer the tokens to the recipient
             rewardToken.safeTransfer(_recipient, rewardAmount);
@@ -311,12 +311,12 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Calculate unclaimed USDC (current balance - last processed balance)
         uint256 currentBalance = rewardToken.balanceOf(address(this));
         uint256 unclaimedBalance = currentBalance - lastRewardBalance;
-        
+
         uint256 withdrawAmount = unclaimedBalance;
         if (withdrawAmount > 0) {
             rewardToken.safeTransfer(owner(), withdrawAmount);
         }
-        
+
         emit OwnerWithdrawnRewards(withdrawAmount);
         return withdrawAmount;
     }
@@ -329,14 +329,14 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Calculate extra tokens (current balance - tracked total)
         uint256 currentBalance = stakingToken.balanceOf(address(this));
         require(currentBalance > totalStaked, "Stake: no extra tokens available");
-        
+
         uint256 extraTokens = currentBalance - totalStaked;
-        
+
         uint256 withdrawAmount = extraTokens;
         if (withdrawAmount > 0) {
             stakingToken.safeTransfer(owner(), withdrawAmount);
         }
-        
+
         emit OwnerWithdrawnExtraTokens(withdrawAmount);
         return withdrawAmount;
     }
@@ -362,8 +362,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         return IERC1363Spender.onApprovalReceived.selector;
     }
 
-
-
     /**
      * @dev Migrates user's entire stake to a new staking contract
      * This function will:
@@ -378,31 +376,32 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function migrate(address _newStakingContract) external nonReentrant returns (uint256) {
         require(_newStakingContract != address(0), "Stake: new contract is the zero address");
         require(_newStakingContract != address(this), "Stake: cannot migrate to self");
-        
+
         // Ensure the target is a valid Stake contract with the same staking token
         Stake newStakingContract = Stake(_newStakingContract);
-        require(address(newStakingContract.stakingToken()) == address(stakingToken), 
-                "Stake: incompatible staking token");
-        
+        require(
+            address(newStakingContract.stakingToken()) == address(stakingToken), "Stake: incompatible staking token"
+        );
+
         // Get user's current staked amount
         UserInfo storage user = userInfo[msg.sender];
         uint256 stakedAmount = user.amount;
         require(stakedAmount > 0, "Stake: no tokens to migrate");
-        
+
         // 1. Claim all pending rewards
         _claim(msg.sender);
-        
+
         // 2. Withdraw all staked tokens
         // Update user staking amount
         user.amount = 0;
         totalStaked -= stakedAmount;
-        
+
         // Update reward debt
         user.rewardDebt = 0;
-        
+
         // 3. Approve the new contract to spend our tokens (staking tokens are now in this contract)
         stakingToken.approve(_newStakingContract, stakedAmount);
-        
+
         // 4. Call depositForUser on the new contract to deposit directly with proper attribution
         bool migrationSuccess = false;
         try newStakingContract.depositForUser(msg.sender, stakedAmount) {
@@ -411,32 +410,32 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             // If the depositForUser call fails, we need to transfer tokens back to the user
             migrationSuccess = false;
         }
-        
+
         if (!migrationSuccess) {
             // If migration failed, return tokens to the user's wallet
             stakingToken.safeTransfer(msg.sender, stakedAmount);
         }
-        
+
         // Clear the approval regardless of outcome
         stakingToken.approve(_newStakingContract, 0);
-        
+
         // Emit events for withdrawal and migration
         emit Withdrawn(msg.sender, stakedAmount);
         emit Migrated(msg.sender, _newStakingContract, stakedAmount);
-        
+
         return stakedAmount;
     }
-    
+
     /**
-     * @dev Sets the router for sweep operations
-     * @param _router The address of the Uniswap-like router to use
+     * @dev Sets the sweeper contract
+     * @param _sweeper The address of the sweeper contract to use
      */
-    function setRouter(address _router) external onlyOwner {
-        require(_router != address(0), "Stake: router is the zero address");
-        defaultRouter = _router;
-        emit RouterSet(_router);
+    function setSweeper(address _sweeper) external onlyOwner {
+        require(_sweeper != address(0), "Stake: sweeper is the zero address");
+        sweeper = StakeSweeper(_sweeper);
+        emit SweeperSet(_sweeper);
     }
-    
+
     /**
      * @dev Sets the minimum percentage of output tokens expected (slippage protection)
      * @param _percentage The percentage (1-100)
@@ -446,7 +445,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         minOutPercentage = _percentage;
         emit MinOutPercentageSet(_percentage);
     }
-    
+
     /**
      * @dev Sets the reward decay factor - determines what fraction of new rewards are released
      * e.g. factor of 10 means 1/10 (10%) of rewards are released each update
@@ -458,7 +457,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         rewardDecayFactor = _newFactor;
         emit RewardDecayFactorSet(_newFactor);
     }
-    
+
     /**
      * @dev Sets the minimum time between reward updates
      * Setting to 0 means rewards can be updated at any time
@@ -468,7 +467,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         minRewardUpdateDelay = _newDelay;
         emit MinRewardUpdateDelaySet(_newDelay);
     }
-    
+
     /**
      * @dev Returns the staked amount for a user
      * @param _user Address of the user
@@ -479,43 +478,35 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @dev Sweeps a token from the contract and swaps it into the reward token using the default router
+     * @dev Sweeps a token from the contract and swaps it into the reward token using the sweeper contract
      * @param _token Address of the token to sweep (can't be staking or reward token)
      * @return The amount of reward tokens received from the swap
      */
     function sweep(address _token) external nonReentrant returns (uint256) {
-        require(defaultRouter != address(0), "Stake: default router not set");
+        require(address(sweeper) != address(0), "Stake: sweeper not set");
         require(_token != address(stakingToken), "Stake: cannot sweep staking token");
         require(_token != address(rewardToken), "Stake: cannot sweep reward token");
-        
+
         // Get the token balance
         IERC20 token = IERC20(_token);
         uint256 balance = token.balanceOf(address(this));
         require(balance > 0, "Stake: no tokens to sweep");
-        
-        // Setup the swap path: token -> reward token
-        address[] memory path = new address[](2);
-        path[0] = _token;
-        path[1] = address(rewardToken);
-        
+
+        // Transfer the token to the sweeper
+        token.safeTransfer(address(sweeper), balance);
+
         // Execute the swap using our internal swap function
-        // For sweep operations, we use minOutPercentage/2 for less strict slippage protection
-        uint256 amountOut = _swapTokens(
-            _token,           // tokenIn
-            address(rewardToken), // tokenOut
-            balance,          // amountIn
-            address(this)    // recipient
-        );
-        
+        uint256 amountOut = sweeper.sweep(_token, address(this));
+
         // Update the lastRewardBalance to account for the new rewards
         updateRewards();
-        
+
         // Emit the sweep event
         emit TokenSwept(_token, balance, amountOut);
-        
+
         return amountOut;
     }
-    
+
     /**
      * @dev Reinvests a user's rewards back into their stake
      * 1. Claims rewards to this contract
@@ -524,55 +515,54 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return stakingTokensReceived The amount of staking tokens received and reinvested
      */
     function reinvest() external nonReentrant returns (uint256) {
-        require(defaultRouter != address(0), "Stake: default router not set");
-        
+        require(address(sweeper) != address(0), "Stake: sweeper not set");
+
         // Step 1: Update rewards to ensure all pending rewards are accounted for
         updateRewards();
-        
+
         // Step 2: Check if user has pending rewards to reinvest
         UserInfo storage user = userInfo[msg.sender];
         uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
         require(pending > 0, "Stake: no rewards to reinvest");
-        
+
         // Step 3: Claim rewards internally
         uint256 rewardAmount = _claimRewards(msg.sender);
-        
+
         // Emit RewardClaimed event
         emit RewardClaimed(msg.sender, rewardAmount);
-        
-        // Get initial staking token balance before swap
+
+        // Transfer reward token to sweeper
+        rewardToken.safeTransfer(address(sweeper), rewardAmount);
+
+        // Check staking token balance before reinvest
         uint256 stakingTokenBalanceBefore = stakingToken.balanceOf(address(this));
-        
+
         // Execute swap from reward tokens to staking tokens
-        _swapTokens(
-            address(rewardToken),   // tokenIn
-            address(stakingToken),   // tokenOut
-            rewardAmount,            // amountIn
-            address(this)           // recipient
-        );
-        
-        // Step 7: Calculate how many staking tokens we received
+        sweeper.reinvest(address(stakingToken), address(this));
+
+        // Check staking token balance after reinvest
         uint256 stakingTokenBalanceAfter = stakingToken.balanceOf(address(this));
-        uint256 stakingTokensReceived = stakingTokenBalanceAfter - stakingTokenBalanceBefore;
-        
-        require(stakingTokensReceived > 0, "Stake: swap did not yield any staking tokens");
-        
-        // Step 8: Re-use deposit logic to add tokens to user's stake
+
+        uint256 stakingTokenBalanceDelta = stakingTokenBalanceAfter - stakingTokenBalanceBefore;
+
+        require(stakingTokenBalanceDelta > 0, "Stake: swap did not yield any staking tokens");
+
+        // Step 4: Re-use deposit logic to add tokens to user's stake
         // No need to transfer tokens as they're already in this contract
-        
+
         // Update user staking amount
-        user.amount += stakingTokensReceived;
-        totalStaked += stakingTokensReceived;
-        
+        user.amount += stakingTokenBalanceDelta;
+        totalStaked += stakingTokenBalanceDelta;
+
         // Update user reward debt
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
-        
-        emit Deposited(msg.sender, stakingTokensReceived);
-        emit Reinvested(msg.sender, rewardAmount, stakingTokensReceived);
-        
-        return stakingTokensReceived;
+
+        emit Deposited(msg.sender, stakingTokenBalanceDelta);
+        emit Reinvested(msg.sender, rewardAmount, stakingTokenBalanceDelta);
+
+        return stakingTokenBalanceDelta;
     }
-    
+
     /**
      * @dev Internal function to claim rewards for a user
      * @param _user Address of the user claiming rewards
@@ -581,79 +571,21 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function _claimRewards(address _user) internal returns (uint256) {
         UserInfo storage user = userInfo[_user];
         uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
-        
+
         if (pending == 0) {
             return 0;
         }
-        
+
         // Check if we have enough reward token balance
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
         uint256 rewardAmount = pending > currentRewardBalance ? currentRewardBalance : pending;
-        
+
         // Important: Update lastRewardBalance to track that these tokens are being claimed
         lastRewardBalance -= rewardAmount;
-        
+
         // Update reward debt to reflect that rewards have been claimed
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
-        
-        return rewardAmount;
-    }
-    
-    /**
-     * @dev Internal function to swap tokens using Uniswap router
-     * @param _tokenIn Address of input token
-     * @param _tokenOut Address of output token
-     * @param _amountIn Amount of input tokens to swap
-     * @param _recipient Address to receive the swapped tokens
-     * @return amountOut Amount of output tokens received
-     */
-    function _swapTokens(
-        address _tokenIn,
-        address _tokenOut,
-        uint256 _amountIn,
-        address _recipient
-    ) internal returns (uint256) {
-        require(defaultRouter != address(0), "Stake: default router not set");
-        require(_amountIn > 0, "Stake: amount to swap must be greater than 0");
-        
-        // Setup the swap path
-        address[] memory path = new address[](2);
-        path[0] = _tokenIn;
-        path[1] = _tokenOut;
-        
-        // Approve the router to spend tokens
-        IERC20(_tokenIn).approve(defaultRouter, _amountIn);
-        
-        // Get quote from router for expected output
-        uint256[] memory amountsOut;
-        uint256 expectedOut = 0;
-        
 
-        try IUniswapRouter(defaultRouter).getAmountsOut(_amountIn, path) returns (uint256[] memory output) {
-            amountsOut = output;
-            if (amountsOut.length > 1) {
-                expectedOut = amountsOut[amountsOut.length - 1];
-            }
-        } catch {}
-        
-        uint256 amountOutMin = expectedOut > 0 
-            ? (expectedOut * minOutPercentage) / 100 
-            : 1; // Fallback to minimal value if quote fails
-        
-        // Execute the swap
-        IUniswapRouter router = IUniswapRouter(defaultRouter);
-        uint256[] memory amounts = router.swapExactTokensForTokens(
-            _amountIn,
-            amountOutMin,
-            path,
-            _recipient,
-            block.timestamp + 1 hours // deadline
-        );
-        
-        // Clear the approval
-        IERC20(_tokenIn).approve(defaultRouter, 0);
-        
-        // Return the amount of output tokens received
-        return amounts[amounts.length - 1];
+        return rewardAmount;
     }
 }

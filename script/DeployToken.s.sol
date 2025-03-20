@@ -9,15 +9,15 @@ contract DeployToken is Script {
     function run() external {
         // Get the Ledger deployer address
         // Default to the first account (index 0) on the Ledger with Legacy HD path
-        uint ledgerIndex = vm.envOr("LEDGER_INDEX", uint(0));
+        uint256 ledgerIndex = vm.envOr("LEDGER_INDEX", uint256(0));
         string memory hdPath = "m/44'/60'/0'/0";
         address deployer = vm.envAddress("LEDGER_ADDRESS");
-        
+
         if (deployer == address(0)) {
             console2.log("Error: No deployer address provided. Set LEDGER_ADDRESS environment variable.");
             return;
         }
-        
+
         console2.log("Using Ledger deployer address:", deployer);
         console2.log("Using Ledger account index:", ledgerIndex);
         console2.log("Using Ledger HD path:", hdPath);

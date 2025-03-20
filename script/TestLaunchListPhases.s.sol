@@ -30,9 +30,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(
-        MintParams calldata params
-    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(MintParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 interface ISwapRouter {
