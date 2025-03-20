@@ -236,7 +236,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function _claim(address _recipient) internal returns (uint256) {
         // Store caller address to prevent issues with msg.sender after external calls
         address caller = msg.sender;
-        
+
         // Update rewards first to ensure all pending rewards are accounted for
         updateRewards();
 
@@ -404,7 +404,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // Update reward debt
         user.rewardDebt = 0;
-        
+
         // Emit withdrawal event - do this before external calls
         emit Withdrawn(userAddress, stakedAmount);
 
@@ -427,7 +427,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             // If migration failed, return tokens to the user's wallet
             stakingToken.safeTransfer(userAddress, stakedAmount);
         }
-        
+
         // Emit migration event
         emit Migrated(userAddress, _newStakingContract, stakedAmount);
 
@@ -524,7 +524,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      */
     function reinvest() external nonReentrant returns (uint256) {
         require(address(sweeper) != address(0), "Stake: sweeper not set");
-        
+
         // Store caller address to prevent issues with msg.sender after external calls
         address caller = msg.sender;
 
