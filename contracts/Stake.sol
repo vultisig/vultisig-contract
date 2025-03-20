@@ -30,8 +30,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
     event RouterSet(address indexed router);
     event Migrated(address indexed user, address indexed newContract, uint256 amount);
-    event RewardDecayFactorSet(uint256 newFactor);
-    event MinRewardUpdateDelaySet(uint256 newDelay);
     event Reinvested(address indexed user, uint256 rewardAmount, uint256 stakingTokensReceived);
     event MinOutPercentageSet(uint8 percentage);
     event VestingStarted(uint256 amount, uint256 timestamp);
@@ -66,12 +64,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
     /// @notice Last time rewards were updated
     uint256 public lastRewardUpdateTime;
-
-    /// @notice Decay factor for releasing rewards (default is 10 = 10%)
-    uint256 public rewardDecayFactor = 10;
-
-    /// @notice Minimum time between reward updates in seconds (default is 1 day)
-    uint256 public minRewardUpdateDelay = 1 days;
 
     /// @notice Mapping of user address to their staking info
     mapping(address => UserInfo) public userInfo;
@@ -122,7 +114,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         uint256 unvestedAmount = getUnvestedAmount();
         uint256 availableBalance = currentRewardBalance - unvestedAmount;
 
-        // If there are new rewards (beyond what's already being tracked)
+        // If there are new rewards
         if (availableBalance > lastRewardBalance) {
             uint256 newRewards = availableBalance - lastRewardBalance;
 
@@ -130,7 +122,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             vestingAmount = newRewards;
             lastVestingStartTime = block.timestamp;
 
-            // Only update accRewardPerShare with vested rewards
+            // Update accRewardPerShare with vested rewards
             uint256 vestedRewards = getVestedAmount();
             if (vestedRewards > 0) {
                 accRewardPerShare += (vestedRewards * 1e12) / totalStaked;
@@ -308,20 +300,19 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return Amount of USDC withdrawn
      */
     function withdrawUnclaimedRewards() external onlyOwner nonReentrant returns (uint256) {
-        // Update rewards to ensure all accounting is current
         updateRewards();
 
-        // Calculate unclaimed USDC (current balance - last processed balance)
+        // Calculate unclaimed USDC (current balance - last processed balance - unvested amount)
         uint256 currentBalance = rewardToken.balanceOf(address(this));
-        uint256 unclaimedBalance = currentBalance - lastRewardBalance;
+        uint256 unvestedAmount = getUnvestedAmount();
+        uint256 unclaimedBalance = currentBalance - lastRewardBalance - unvestedAmount;
 
-        uint256 withdrawAmount = unclaimedBalance;
-        if (withdrawAmount > 0) {
-            rewardToken.safeTransfer(owner(), withdrawAmount);
+        if (unclaimedBalance > 0) {
+            rewardToken.safeTransfer(owner(), unclaimedBalance);
         }
 
-        emit OwnerWithdrawnRewards(withdrawAmount);
-        return withdrawAmount;
+        emit OwnerWithdrawnRewards(unclaimedBalance);
+        return unclaimedBalance;
     }
 
     /**
@@ -448,28 +439,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(_percentage > 0 && _percentage <= 100, "Stake: percentage must be between 1-100");
         minOutPercentage = _percentage;
         emit MinOutPercentageSet(_percentage);
-    }
-
-    /**
-     * @dev Sets the reward decay factor - determines what fraction of new rewards are released
-     * e.g. factor of 10 means 1/10 (10%) of rewards are released each update
-     * Setting factor to 1 releases all rewards at once (no decay)
-     * @param _newFactor The new decay factor (must be at least 1)
-     */
-    function setRewardDecayFactor(uint256 _newFactor) external onlyOwner {
-        require(_newFactor > 0, "Stake: decay factor must be greater than 0");
-        rewardDecayFactor = _newFactor;
-        emit RewardDecayFactorSet(_newFactor);
-    }
-
-    /**
-     * @dev Sets the minimum time between reward updates
-     * Setting to 0 means rewards can be updated at any time
-     * @param _newDelay The new minimum delay in seconds
-     */
-    function setMinRewardUpdateDelay(uint256 _newDelay) external onlyOwner {
-        minRewardUpdateDelay = _newDelay;
-        emit MinRewardUpdateDelaySet(_newDelay);
     }
 
     /**

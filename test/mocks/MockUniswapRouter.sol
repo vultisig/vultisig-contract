@@ -22,7 +22,7 @@ contract MockUniswapRouter is IUniswapRouter {
 
     /**
      * @dev Mock implementation of swapExactTokensForTokens
-     * Simply transfers input tokens from sender to this contract and 
+     * Simply transfers input tokens from sender to this contract and
      * transfers output tokens from this contract to recipient
      */
     function swapExactTokensForTokens(
@@ -34,48 +34,50 @@ contract MockUniswapRouter is IUniswapRouter {
     ) external override returns (uint256[] memory amounts) {
         require(deadline >= block.timestamp, "Transaction expired");
         require(path.length >= 2, "Invalid path");
-        
+
         IERC20 inputToken = IERC20(path[0]);
         IERC20 outputToken = IERC20(path[path.length - 1]);
-        
+
         // Calculate output amount based on exchange rate
         uint256 amountOut = amountIn * exchangeRate;
         require(amountOut >= amountOutMin, "Insufficient output amount");
-        
+
         // Transfer input tokens from sender to this contract
         inputToken.safeTransferFrom(msg.sender, address(this), amountIn);
-        
+
         // Transfer output tokens to recipient
         outputToken.safeTransfer(to, amountOut);
-        
+
         // Return amounts array
         amounts = new uint256[](path.length);
         amounts[0] = amountIn;
         amounts[path.length - 1] = amountOut;
-        
+
         return amounts;
     }
-    
+
     /**
      * @dev Mock implementation of getAmountsOut
      * @param amountIn The amount of input tokens
      * @param path Array of token addresses representing the path
      * @return amounts The input amount and calculated output amounts based on exchange rate
      */
-    function getAmountsOut(
-        uint256 amountIn,
-        address[] calldata path
-    ) external view override returns (uint256[] memory amounts) {
+    function getAmountsOut(uint256 amountIn, address[] calldata path)
+        external
+        view
+        override
+        returns (uint256[] memory amounts)
+    {
         require(path.length >= 2, "Invalid path");
-        
+
         // Calculate output amount based on exchange rate
         uint256 amountOut = amountIn * exchangeRate;
-        
+
         // Create and populate the amounts array
         amounts = new uint256[](path.length);
         amounts[0] = amountIn;
         amounts[path.length - 1] = amountOut;
-        
+
         return amounts;
     }
 }

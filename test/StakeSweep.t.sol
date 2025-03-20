@@ -64,7 +64,7 @@ contract StakeSweepTest is Test {
         // Verify sweep results
         assertEq(amountReceived, EXTRA_TOKEN_AMOUNT * EXCHANGE_RATE);
         assertEq(extraToken.balanceOf(address(stake)), 0); // All extra tokens should be gone
-        
+
         // Verify rewards increased
         uint256 finalRewardBalance = rewardToken.balanceOf(address(stake));
         assertEq(finalRewardBalance, initialRewardBalance + amountReceived);
@@ -79,38 +79,38 @@ contract StakeSweepTest is Test {
         // Send more extraToken to the stake contract for this test
         vm.startPrank(owner);
         extraToken.transfer(address(stake), EXTRA_TOKEN_AMOUNT);
-        
+
         // Set default router
         vm.expectEmit(true, false, false, false);
         emit Stake.RouterSet(address(router));
         stake.setRouter(address(router));
         vm.stopPrank();
-        
+
         // Check initial state
         assertEq(extraToken.balanceOf(address(stake)), EXTRA_TOKEN_AMOUNT * 2);
         uint256 initialRewardBalance = rewardToken.balanceOf(address(stake));
-        
+
         // Sweep using the default router as a regular user
         vm.startPrank(user);
-        
+
         // Expect TokenSwept event with correct parameters
         vm.expectEmit(true, false, false, false);
         emit Stake.TokenSwept(address(extraToken), EXTRA_TOKEN_AMOUNT * 2, EXTRA_TOKEN_AMOUNT * 2 * EXCHANGE_RATE);
-        
+
         // Call sweep function with just the token parameter (using default router)
         uint256 amountReceived = stake.sweep(address(extraToken));
-        
+
         // Verify sweep results
         assertEq(amountReceived, EXTRA_TOKEN_AMOUNT * 2 * EXCHANGE_RATE);
         assertEq(extraToken.balanceOf(address(stake)), 0); // All extra tokens should be gone
-        
+
         // Verify rewards increased
         uint256 finalRewardBalance = rewardToken.balanceOf(address(stake));
         assertEq(finalRewardBalance, initialRewardBalance + amountReceived);
-        
+
         vm.stopPrank();
     }
-    
+
     function test_SweepByAnyUser() public {
         // Show that any user (not just the owner) can call sweep
         assertEq(extraToken.balanceOf(address(stake)), EXTRA_TOKEN_AMOUNT);
@@ -119,7 +119,7 @@ contract StakeSweepTest is Test {
         // Set router first (as owner)
         vm.prank(owner);
         stake.setRouter(address(router));
-        
+
         // Sweep as a regular user (not owner)
         vm.startPrank(user);
 
@@ -133,7 +133,7 @@ contract StakeSweepTest is Test {
         // Verify rewards increased
         uint256 finalRewardBalance = rewardToken.balanceOf(address(stake));
         assertEq(finalRewardBalance, initialRewardBalance + amountReceived);
-        
+
         vm.stopPrank();
     }
 
@@ -141,10 +141,10 @@ contract StakeSweepTest is Test {
         // Set router first
         vm.startPrank(owner);
         stake.setRouter(address(router));
-        
+
         vm.expectRevert("Stake: cannot sweep staking token");
         stake.sweep(address(stakingToken));
-        
+
         vm.stopPrank();
     }
 
@@ -152,10 +152,10 @@ contract StakeSweepTest is Test {
         // Set router first
         vm.startPrank(owner);
         stake.setRouter(address(router));
-        
+
         vm.expectRevert("Stake: cannot sweep reward token");
         stake.sweep(address(rewardToken));
-        
+
         vm.stopPrank();
     }
 
@@ -165,14 +165,14 @@ contract StakeSweepTest is Test {
     function test_RevertSweepNoTokens() public {
         // Setup a new token with zero balance in the contract
         MockERC1363 emptyToken = new MockERC1363(1000 ether);
-        
+
         // Set router first
         vm.startPrank(owner);
         stake.setRouter(address(router));
-        
+
         vm.expectRevert("Stake: no tokens to sweep");
         stake.sweep(address(emptyToken));
-        
+
         vm.stopPrank();
     }
 
@@ -181,7 +181,7 @@ contract StakeSweepTest is Test {
         vm.expectRevert("Stake: default router not set");
         stake.sweep(address(extraToken));
     }
-    
+
     function test_SetRouterNotOwner() public {
         // Try to set router as non-owner
         vm.startPrank(user);
@@ -190,7 +190,7 @@ contract StakeSweepTest is Test {
         stake.setRouter(address(router));
         vm.stopPrank();
     }
-    
+
     function test_SetRouterZeroAddress() public {
         // Try to set router to zero address
         vm.startPrank(owner);
@@ -198,7 +198,7 @@ contract StakeSweepTest is Test {
         stake.setRouter(address(0));
         vm.stopPrank();
     }
-    
+
     // These tests are no longer needed
     // All trades will go through regardless of output amount since amountOutMin is fixed at 0
     // Transactions won't expire within the test execution time since deadline is fixed at 24 hours from now
