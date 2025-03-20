@@ -15,12 +15,12 @@ contract StakeSweeper is Ownable {
 
     // Events
     event RouterSet(address indexed router);
-    event MinOutPercentageSet(uint8 percentage);
+    event MinOutPercentageSet(uint16 percentage);
     event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
 
     // State variables
     address public defaultRouter;
-    uint8 public minOutPercentage = 90; // Default 90% to protect from slippage
+    uint16 public minOutPercentage = 90; // Default 90% to protect from slippage
     IERC20 public immutable rewardToken;
 
     constructor(address _rewardToken, address _router) Ownable(msg.sender) {
@@ -44,18 +44,22 @@ contract StakeSweeper is Ownable {
      * @dev Sets the minimum percentage of output tokens expected (slippage protection)
      * @param _percentage The percentage (1-100)
      */
-    function setMinOutPercentage(uint8 _percentage) external onlyOwner {
+    function setMinOutPercentage(uint16 _percentage) external onlyOwner {
         require(_percentage > 0 && _percentage <= 100, "StakeSweeper: percentage must be between 1-100");
         minOutPercentage = _percentage;
         emit MinOutPercentageSet(_percentage);
     }
 
     /**
+     * @dev Reinvests reward tokens into staking tokens
+     * @param _stakingToken Address of the staking token
+     * @param _recipient Address to receive the staking tokens
+     * @return Amount of staking tokens received
      */
     function reinvest(address _stakingToken, address _recipient) external returns (uint256) {
         uint256 balance = IERC20(rewardToken).balanceOf(address(this));
 
-        uint256 amountOut = _swapTokens(address(rewardToken), address(_stakingToken), balance, _recipient);
+        uint256 amountOut = _swapTokens(address(rewardToken), _stakingToken, balance, _recipient);
 
         emit TokenSwept(address(rewardToken), balance, amountOut);
         return amountOut;
@@ -84,6 +88,11 @@ contract StakeSweeper is Ownable {
 
     /**
      * @dev Internal function to swap tokens using Uniswap router
+     * @param _tokenIn Token to swap from
+     * @param _tokenOut Token to swap to
+     * @param _amountIn Amount of input tokens to swap
+     * @param _recipient Address to receive the output tokens
+     * @return Amount of output tokens received
      */
     function _swapTokens(address _tokenIn, address _tokenOut, uint256 _amountIn, address _recipient)
         internal
@@ -91,31 +100,45 @@ contract StakeSweeper is Ownable {
     {
         require(_amountIn > 0, "StakeSweeper: amount to swap must be greater than 0");
 
+        // Cache router address to save gas
+        address router = defaultRouter;
+        uint16 minOutPct = minOutPercentage;
+
+        // Create path array in memory
         address[] memory path = new address[](2);
         path[0] = _tokenIn;
         path[1] = _tokenOut;
 
-        IERC20(_tokenIn).approve(defaultRouter, _amountIn);
+        // Approve router to spend tokens
+        IERC20(_tokenIn).approve(router, _amountIn);
 
         // Get quote from router
-        uint256[] memory amountsOut;
         uint256 expectedOut = 0;
+        uint256 amountOutMin = 1; // Default minimum
 
-        try IUniswapRouter(defaultRouter).getAmountsOut(_amountIn, path) returns (uint256[] memory output) {
-            amountsOut = output;
+        try IUniswapRouter(router).getAmountsOut(_amountIn, path) returns (uint256[] memory amountsOut) {
             if (amountsOut.length > 1) {
                 expectedOut = amountsOut[amountsOut.length - 1];
+                // Use unchecked for simple math operations that can't overflow
+                unchecked {
+                    amountOutMin = expectedOut > 0 ? (expectedOut * minOutPct) / 100 : 1;
+                }
             }
         } catch {}
 
-        uint256 amountOutMin = expectedOut > 0 ? (expectedOut * minOutPercentage) / 100 : 1;
+        // Execute swap with deadline 1 hour from now
+        uint256 deadline;
+        unchecked {
+            deadline = block.timestamp + 1 hours;
+        }
 
         // Execute swap
-        uint256[] memory amounts = IUniswapRouter(defaultRouter).swapExactTokensForTokens(
-            _amountIn, amountOutMin, path, _recipient, block.timestamp + 1 hours
-        );
+        uint256[] memory amounts =
+            IUniswapRouter(router).swapExactTokensForTokens(_amountIn, amountOutMin, path, _recipient, deadline);
 
-        IERC20(_tokenIn).approve(defaultRouter, 0);
+        // Reset approval to 0
+        IERC20(_tokenIn).approve(router, 0);
+
         return amounts[amounts.length - 1];
     }
 }

@@ -30,10 +30,10 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
     event SweeperSet(address indexed sweeper);
     event Migrated(address indexed user, address indexed newContract, uint256 amount);
-    event RewardDecayFactorSet(uint256 newFactor);
+    event RewardDecayFactorSet(uint16 newFactor);
     event MinRewardUpdateDelaySet(uint256 newDelay);
     event Reinvested(address indexed user, uint256 rewardAmount, uint256 stakingTokensReceived);
-    event MinOutPercentageSet(uint8 percentage);
+    event MinOutPercentageSet(uint16 percentage);
 
     // ================= State Variables =================
     /// @notice User staking information
@@ -51,8 +51,12 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     /// @notice Sweeper contract for sweeping tokens
     StakeSweeper public sweeper;
 
+    // Pack related variables into a single storage slot (saves gas)
     /// @notice Min amount out percentage for reinvest swaps (1-100)
-    uint8 public minOutPercentage = 90; // Default 90% to protect from slippage
+    uint16 public minOutPercentage = 90; // Default 90% to protect from slippage
+
+    /// @notice Decay factor for releasing rewards (default is 10 = 10%)
+    uint16 public rewardDecayFactor = 10;
 
     /// @notice Accumulated reward tokens per share, scaled by 1e12
     uint256 public accRewardPerShare;
@@ -65,9 +69,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
     /// @notice Last time rewards were updated
     uint256 public lastRewardUpdateTime;
-
-    /// @notice Decay factor for releasing rewards (default is 10 = 10%)
-    uint256 public rewardDecayFactor = 10;
 
     /// @notice Minimum time between reward updates in seconds (default is 1 day)
     uint256 public minRewardUpdateDelay = 1 days;
@@ -102,33 +103,50 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * The owner can configure minRewardUpdateDelay and rewardDecayFactor to control behavior
      */
     function _updateRewards() internal {
-        if (totalStaked == 0) {
+        // Cache storage variables in memory to save gas
+        uint256 _totalStaked = totalStaked;
+
+        if (_totalStaked == 0) {
             lastRewardBalance = rewardToken.balanceOf(address(this));
             lastRewardUpdateTime = block.timestamp;
             return;
         }
 
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
-        bool timeDelayMet = (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay);
+        uint256 _lastRewardBalance = lastRewardBalance;
+        uint256 _minRewardUpdateDelay = minRewardUpdateDelay;
+        uint256 _lastRewardUpdateTime = lastRewardUpdateTime;
+        uint16 _rewardDecayFactor = rewardDecayFactor;
+        uint256 _accRewardPerShare = accRewardPerShare;
+        uint256 currentTimestamp = block.timestamp;
+
+        bool timeDelayMet = (currentTimestamp >= _lastRewardUpdateTime + _minRewardUpdateDelay);
 
         // If there are new rewards and enough time has passed (or delay is set to 0)
-        if (currentRewardBalance > lastRewardBalance && (timeDelayMet || minRewardUpdateDelay == 0)) {
-            uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
+        if (currentRewardBalance > _lastRewardBalance && (timeDelayMet || _minRewardUpdateDelay == 0)) {
+            uint256 totalNewRewards = currentRewardBalance - _lastRewardBalance;
 
             // Apply decay factor (if decay factor is 1, all rewards are released)
-            uint256 releasedRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
+            uint256 releasedRewards;
 
-            // Update accRewardPerShare based on released rewards
-            // Scaled by 1e12 to avoid precision loss when dividing small numbers
-            accRewardPerShare += (releasedRewards * 1e12) / totalStaked;
+            // Use unchecked for operations that can't overflow
+            unchecked {
+                releasedRewards = _rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / _rewardDecayFactor;
 
-            // Update the last reward balance - only account for released rewards
-            lastRewardBalance += releasedRewards;
+                // Update accRewardPerShare based on released rewards
+                // Scaled by 1e12 to avoid precision loss when dividing small numbers
+                _accRewardPerShare += (releasedRewards * 1e12) / _totalStaked;
 
-            // Update the last update time
-            lastRewardUpdateTime = block.timestamp;
+                // Update the last reward balance - only account for released rewards
+                _lastRewardBalance += releasedRewards;
+            }
 
-            emit RewardsUpdated(accRewardPerShare, releasedRewards);
+            // Write back to storage
+            accRewardPerShare = _accRewardPerShare;
+            lastRewardBalance = _lastRewardBalance;
+            lastRewardUpdateTime = currentTimestamp;
+
+            emit RewardsUpdated(_accRewardPerShare, releasedRewards);
         }
     }
 
@@ -138,32 +156,50 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return Pending reward amount
      */
     function pendingRewards(address _user) public view returns (uint256) {
+        // Cache storage variables in memory
         UserInfo storage user = userInfo[_user];
-        if (user.amount == 0 || totalStaked == 0) {
+        uint256 userAmount = user.amount;
+        uint256 userRewardDebt = user.rewardDebt;
+        uint256 _totalStaked = totalStaked;
+
+        if (userAmount == 0 || _totalStaked == 0) {
             return 0;
         }
 
+        uint256 _accRewardPerShare = accRewardPerShare;
+        uint256 _lastRewardBalance = lastRewardBalance;
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
+
+        // If no new rewards, just calculate with current accRewardPerShare
+        if (currentRewardBalance <= _lastRewardBalance) {
+            return (userAmount * _accRewardPerShare) / 1e12 - userRewardDebt;
+        }
+
+        // Calculate additional rewards
+        uint256 _lastRewardUpdateTime = lastRewardUpdateTime;
+        uint256 _minRewardUpdateDelay = minRewardUpdateDelay;
+        uint16 _rewardDecayFactor = rewardDecayFactor;
+        uint256 totalNewRewards;
         uint256 additionalRewards = 0;
-        uint256 newAccRewardPerShare = accRewardPerShare;
+        uint256 newAccRewardPerShare = _accRewardPerShare;
 
         // Check if there are additional rewards
-        if (currentRewardBalance > lastRewardBalance && totalStaked > 0) {
-            uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
+        unchecked {
+            totalNewRewards = currentRewardBalance - _lastRewardBalance;
 
             // Apply decay and time check based on configured parameters
-            if (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay || minRewardUpdateDelay == 0) {
+            if (block.timestamp >= _lastRewardUpdateTime + _minRewardUpdateDelay || _minRewardUpdateDelay == 0) {
                 // Apply decay - only consider a fraction of the new rewards unless decay factor is 1
-                additionalRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
+                additionalRewards = _rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / _rewardDecayFactor;
             }
 
             if (additionalRewards > 0) {
-                newAccRewardPerShare += (additionalRewards * 1e12) / totalStaked;
+                newAccRewardPerShare += (additionalRewards * 1e12) / _totalStaked;
             }
-        }
 
-        // Calculate pending rewards using the formula:
-        return (user.amount * newAccRewardPerShare) / 1e12 - user.rewardDebt;
+            // Calculate pending rewards using the formula:
+            return (userAmount * newAccRewardPerShare) / 1e12 - userRewardDebt;
+        }
     }
 
     /**
@@ -176,18 +212,22 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Update reward variables
         updateRewards();
 
-        // Get user info
+        // Get user info and cache accRewardPerShare
         UserInfo storage user = userInfo[_user];
+        uint256 _accRewardPerShare = accRewardPerShare;
 
         // Transfer tokens from the depositor to this contract
         stakingToken.safeTransferFrom(_depositor, address(this), _amount);
 
-        // Update user staking amount
-        user.amount += _amount;
-        totalStaked += _amount;
+        // Update user staking amount and total staked
+        // Use unchecked for operations that can't overflow
+        unchecked {
+            user.amount += _amount;
+            totalStaked += _amount;
 
-        // Update user reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+            // Update user reward debt
+            user.rewardDebt = (user.amount * _accRewardPerShare) / 1e12;
+        }
 
         emit Deposited(_user, _amount);
     }
@@ -448,7 +488,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @dev Sets the minimum percentage of output tokens expected (slippage protection)
      * @param _percentage The percentage (1-100)
      */
-    function setMinOutPercentage(uint8 _percentage) external onlyOwner {
+    function setMinOutPercentage(uint16 _percentage) external onlyOwner {
         require(_percentage > 0 && _percentage <= 100, "Stake: percentage must be between 1-100");
         minOutPercentage = _percentage;
         emit MinOutPercentageSet(_percentage);
@@ -460,7 +500,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * Setting factor to 1 releases all rewards at once (no decay)
      * @param _newFactor The new decay factor (must be at least 1)
      */
-    function setRewardDecayFactor(uint256 _newFactor) external onlyOwner {
+    function setRewardDecayFactor(uint16 _newFactor) external onlyOwner {
         require(_newFactor > 0, "Stake: decay factor must be greater than 0");
         rewardDecayFactor = _newFactor;
         emit RewardDecayFactorSet(_newFactor);
@@ -580,8 +620,17 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @return rewardAmount Amount of rewards claimed
      */
     function _claimRewards(address _user) internal returns (uint256) {
+        // Cache storage variables in memory
         UserInfo storage user = userInfo[_user];
-        uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
+        uint256 userAmount = user.amount;
+        uint256 userRewardDebt = user.rewardDebt;
+        uint256 _accRewardPerShare = accRewardPerShare;
+
+        // Calculate pending rewards
+        uint256 pending;
+        unchecked {
+            pending = (userAmount * _accRewardPerShare) / 1e12 - userRewardDebt;
+        }
 
         if (pending == 0) {
             return 0;
@@ -592,10 +641,12 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         uint256 rewardAmount = pending > currentRewardBalance ? currentRewardBalance : pending;
 
         // Important: Update lastRewardBalance to track that these tokens are being claimed
-        lastRewardBalance -= rewardAmount;
+        unchecked {
+            lastRewardBalance -= rewardAmount;
+        }
 
         // Update reward debt to reflect that rewards have been claimed
-        user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
+        user.rewardDebt = (userAmount * _accRewardPerShare) / 1e12;
 
         return rewardAmount;
     }

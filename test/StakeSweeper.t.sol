@@ -18,7 +18,7 @@ contract StakeSweeperTest is Test {
     uint256 public constant INITIAL_SUPPLY = 1_000_000 ether;
 
     event RouterSet(address indexed router);
-    event MinOutPercentageSet(uint8 percentage);
+    event MinOutPercentageSet(uint16 percentage);
     event TokenSwept(address indexed token, uint256 amountIn, uint256 amountOut);
 
     function setUp() public {
@@ -81,7 +81,7 @@ contract StakeSweeperTest is Test {
     }
 
     function test_SetMinOutPercentage() public {
-        uint8 newPercentage = 95;
+        uint16 newPercentage = 95;
 
         vm.startPrank(owner);
 
