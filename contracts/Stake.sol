@@ -42,6 +42,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         uint256 rewardDebt; // Reward debt as per Masterchef logic
     }
 
+    /// @notice Scaling factor for reward per share calculations
     uint128 constant REWARD_DECAY_FACTOR_SCALING = 1e26;
 
     /// @notice VULT token being staked
