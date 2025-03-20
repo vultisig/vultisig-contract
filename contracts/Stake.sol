@@ -301,47 +301,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     }
 
     /**
-     * @dev Allows the owner to withdraw all unclaimed USDC rewards
-     * @return Amount of USDC withdrawn
-     */
-    function withdrawUnclaimedRewards() external onlyOwner nonReentrant returns (uint256) {
-        // Update rewards to ensure all accounting is current
-        updateRewards();
-
-        // Calculate unclaimed USDC (current balance - last processed balance)
-        uint256 currentBalance = rewardToken.balanceOf(address(this));
-        uint256 unclaimedBalance = currentBalance - lastRewardBalance;
-
-        uint256 withdrawAmount = unclaimedBalance;
-        if (withdrawAmount > 0) {
-            rewardToken.safeTransfer(owner(), withdrawAmount);
-        }
-
-        emit OwnerWithdrawnRewards(withdrawAmount);
-        return withdrawAmount;
-    }
-
-    /**
-     * @dev Allows the owner to withdraw all extra staking tokens that are not part of totalStaked
-     * @return Amount of tokens withdrawn
-     */
-    function withdrawExtraStakingTokens() external onlyOwner nonReentrant returns (uint256) {
-        // Calculate extra tokens (current balance - tracked total)
-        uint256 currentBalance = stakingToken.balanceOf(address(this));
-        require(currentBalance > totalStaked, "Stake: no extra tokens available");
-
-        uint256 extraTokens = currentBalance - totalStaked;
-
-        uint256 withdrawAmount = extraTokens;
-        if (withdrawAmount > 0) {
-            stakingToken.safeTransfer(owner(), withdrawAmount);
-        }
-
-        emit OwnerWithdrawnExtraTokens(withdrawAmount);
-        return withdrawAmount;
-    }
-
-    /**
      * @dev Implementation of IERC1363Spender onApprovalReceived to handle approveAndCall
      * This function is called when a user calls approveAndCall on the token contract
      * @param owner The address which called approveAndCall function and approved the tokens
