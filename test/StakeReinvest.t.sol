@@ -111,11 +111,7 @@ contract StakeReinvestTest is Test {
 
         // Verify results
         assertGt(reinvestedAmount, 0, "Should have reinvested some tokens");
-        assertEq(
-            userStakeAfter,
-            userStakeBefore + reinvestedAmount,
-            "Stake should have increased by reinvested amount"
-        );
+        assertEq(userStakeAfter, userStakeBefore + reinvestedAmount, "Stake should have increased by reinvested amount");
 
         // Check rewards were claimed
         uint256 newPendingRewards = stake.pendingRewards(user);
@@ -319,7 +315,7 @@ contract StakeReinvestTest is Test {
         bool foundDeposited = false;
         bool foundReinvested = false;
 
-        for (uint i = 0; i < entries.length; i++) {
+        for (uint256 i = 0; i < entries.length; i++) {
             // Check for RewardClaimed event
             if (entries[i].topics[0] == keccak256("RewardClaimed(address,uint256)")) {
                 address eventUser = address(uint160(uint256(entries[i].topics[1])));

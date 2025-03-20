@@ -79,12 +79,12 @@ contract StakeMigrationTest is Test {
         (uint256 oldStakedAmount,) = oldStake.userInfo(user);
         assertEq(oldStakedAmount, 0);
         assertEq(oldStake.totalStaked(), 0);
-        
+
         // Verify tokens are now directly in the new contract
         (uint256 newStakedAmount,) = newStake.userInfo(user);
         assertEq(newStakedAmount, DEPOSIT_AMOUNT);
         assertEq(newStake.totalStaked(), DEPOSIT_AMOUNT);
-        
+
         // Ensure user's wallet balance is unchanged (tokens went directly from old to new contract)
         assertEq(stakingToken.balanceOf(user), USER_BALANCE - DEPOSIT_AMOUNT);
 
@@ -95,40 +95,40 @@ contract StakeMigrationTest is Test {
         // Add some rewards to old contract (simulating time passing)
         vm.prank(owner);
         rewardToken.transfer(address(oldStake), REWARD_AMOUNT);
-        
+
         // Configure rewards for immediate updates with no decay for testing
         vm.startPrank(owner);
         oldStake.setMinRewardUpdateDelay(0); // No delay between updates
-        oldStake.setRewardDecayFactor(1);    // No decay (release all rewards)
+        oldStake.setRewardDecayFactor(1); // No decay (release all rewards)
         vm.stopPrank();
-        
+
         // Update rewards - with the parameters set above, all rewards will be processed
         oldStake.updateRewards();
-        
+
         // Check initial pending rewards
         uint256 pendingRewards = oldStake.pendingRewards(user);
         assertTrue(pendingRewards > 0, "User should have pending rewards");
-        
+
         // Store initial reward balance for later comparison
         uint256 initialRewardBalance = rewardToken.balanceOf(user);
-        
+
         // User migrates - now handles the complete migration in one transaction
         vm.startPrank(user);
         uint256 migratedAmount = oldStake.migrate(address(newStake));
         assertEq(migratedAmount, DEPOSIT_AMOUNT);
-        
+
         // Verify rewards were claimed during migration
         uint256 newRewardBalance = rewardToken.balanceOf(user);
         assertTrue(newRewardBalance > initialRewardBalance, "User should have received rewards");
-        
+
         // Verify tokens are now directly in the new contract
         (uint256 newStakedAmount,) = newStake.userInfo(user);
         assertEq(newStakedAmount, DEPOSIT_AMOUNT);
         assertEq(newStake.totalStaked(), DEPOSIT_AMOUNT);
-        
+
         // Ensure user's wallet balance is unchanged (tokens went directly from old to new contract)
         assertEq(stakingToken.balanceOf(user), USER_BALANCE - DEPOSIT_AMOUNT);
-        
+
         vm.stopPrank();
     }
 
@@ -136,43 +136,43 @@ contract StakeMigrationTest is Test {
         // Create a stake contract with different staking token
         MockERC1363 differentToken = new MockERC1363(INITIAL_SUPPLY);
         Stake invalidStake = new Stake(address(differentToken), address(rewardToken));
-        
+
         vm.startPrank(user);
-        
+
         // Should revert when trying to migrate to a contract with different staking token
         vm.expectRevert("Stake: incompatible staking token");
         oldStake.migrate(address(invalidStake));
-        
+
         vm.stopPrank();
     }
 
     function test_RevertMigrateZeroAddress() public {
         vm.startPrank(user);
-        
+
         vm.expectRevert("Stake: new contract is the zero address");
         oldStake.migrate(address(0));
-        
+
         vm.stopPrank();
     }
 
     function test_RevertMigrateToSelf() public {
         vm.startPrank(user);
-        
+
         vm.expectRevert("Stake: cannot migrate to self");
         oldStake.migrate(address(oldStake));
-        
+
         vm.stopPrank();
     }
 
     function test_RevertMigrateNoStake() public {
         // Create a new user with no stake
         address noStakeUser = makeAddr("noStakeUser");
-        
+
         vm.startPrank(noStakeUser);
-        
+
         vm.expectRevert("Stake: no tokens to migrate");
         oldStake.migrate(address(newStake));
-        
+
         vm.stopPrank();
     }
 }

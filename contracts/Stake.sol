@@ -348,11 +348,11 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param value The amount of tokens to be spent
      * @return bytes4 The function selector to confirm the transaction is accepted
      */
-    function onApprovalReceived(
-        address owner,
-        uint256 value,
-        bytes calldata /* data */
-    ) external override returns (bytes4) {
+    function onApprovalReceived(address owner, uint256 value, bytes calldata /* data */ )
+        external
+        override
+        returns (bytes4)
+    {
         require(msg.sender == address(stakingToken), "Stake: caller is not the staking token");
         require(value > 0, "Stake: amount must be greater than 0");
 
@@ -380,8 +380,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Ensure the target is a valid Stake contract with the same staking token
         Stake newStakingContract = Stake(_newStakingContract);
         require(
-            address(newStakingContract.stakingToken()) == address(stakingToken),
-            "Stake: incompatible staking token"
+            address(newStakingContract.stakingToken()) == address(stakingToken), "Stake: incompatible staking token"
         );
 
         // Get user's current staked amount

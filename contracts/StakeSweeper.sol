@@ -85,12 +85,10 @@ contract StakeSweeper is Ownable {
     /**
      * @dev Internal function to swap tokens using Uniswap router
      */
-    function _swapTokens(
-        address _tokenIn,
-        address _tokenOut,
-        uint256 _amountIn,
-        address _recipient
-    ) internal returns (uint256) {
+    function _swapTokens(address _tokenIn, address _tokenOut, uint256 _amountIn, address _recipient)
+        internal
+        returns (uint256)
+    {
         require(_amountIn > 0, "StakeSweeper: amount to swap must be greater than 0");
 
         address[] memory path = new address[](2);
@@ -114,11 +112,7 @@ contract StakeSweeper is Ownable {
 
         // Execute swap
         uint256[] memory amounts = IUniswapRouter(defaultRouter).swapExactTokensForTokens(
-            _amountIn,
-            amountOutMin,
-            path,
-            _recipient,
-            block.timestamp + 1 hours
+            _amountIn, amountOutMin, path, _recipient, block.timestamp + 1 hours
         );
 
         IERC20(_tokenIn).approve(defaultRouter, 0);
