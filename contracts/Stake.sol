@@ -51,9 +51,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     /// @notice Sweeper contract for sweeping tokens
     StakeSweeper public sweeper;
 
-    /// @notice Min amount out percentage for reinvest swaps (1-100)
-    uint8 public minOutPercentage = 90; // Default 90% to protect from slippage
-
     /// @notice Accumulated reward tokens per share, scaled by 1e12
     uint256 public accRewardPerShare;
 
@@ -393,16 +390,6 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(_sweeper != address(0), "Stake: sweeper is the zero address");
         sweeper = StakeSweeper(_sweeper);
         emit SweeperSet(_sweeper);
-    }
-
-    /**
-     * @dev Sets the minimum percentage of output tokens expected (slippage protection)
-     * @param _percentage The percentage (1-100)
-     */
-    function setMinOutPercentage(uint8 _percentage) external onlyOwner {
-        require(_percentage > 0 && _percentage <= 100, "Stake: percentage must be between 1-100");
-        minOutPercentage = _percentage;
-        emit MinOutPercentageSet(_percentage);
     }
 
     /**

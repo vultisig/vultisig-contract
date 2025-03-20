@@ -91,14 +91,6 @@ contract StakeReinvestTest is Test {
         // Get user stake amount before reinvesting
         uint256 userStakeBefore = stake.userAmount(user);
 
-        // Execute reinvestment as the user
-        vm.startPrank(user);
-        // Set min out percentage to something reasonable for our mock router
-        // (In practice this would be done by the contract owner)
-        vm.stopPrank();
-        vm.prank(owner);
-        stake.setMinOutPercentage(80);
-
         vm.prank(user);
         uint256 reinvestedAmount = stake.reinvest();
         console.log("Reinvested amount:", reinvestedAmount);
@@ -117,29 +109,8 @@ contract StakeReinvestTest is Test {
         uint256 newPendingRewards = stake.pendingRewards(user);
         assertEq(newPendingRewards, 0, "All rewards should have been claimed");
     }
-
-    // Test minOutPercentage parameter validation
-    function test_SlippageProtection() public {
-        // Test that minOutPercentage is properly enforced and validated
-
-        // Try to set an invalid minOutPercentage (over 100%)
-        vm.startPrank(owner);
-        vm.expectRevert("Stake: percentage must be between 1-100");
-        stake.setMinOutPercentage(101);
-
-        // Try to set an invalid minOutPercentage (0%)
-        vm.expectRevert("Stake: percentage must be between 1-100");
-        stake.setMinOutPercentage(0);
-
-        // Set a valid minOutPercentage
-        stake.setMinOutPercentage(95);
-
-        // Verify it was set correctly
-        assertEq(stake.minOutPercentage(), 95);
-        vm.stopPrank();
-    }
-
     // Test with router not set
+
     function test_RevertNoRouter() public {
         // Deploy new stake contract with no router set
         vm.startPrank(owner);
@@ -205,21 +176,6 @@ contract StakeReinvestTest is Test {
         vm.stopPrank();
     }
 
-    // Test setting the minOutPercentage parameter
-    function test_SetMinOutPercentage() public {
-        // Try to set parameter as non-owner
-        vm.startPrank(user);
-        vm.expectRevert();
-        stake.setMinOutPercentage(80);
-        vm.stopPrank();
-
-        // Should work when owner calls
-        vm.startPrank(owner);
-        stake.setMinOutPercentage(80);
-        assertEq(stake.minOutPercentage(), 80);
-        vm.stopPrank();
-    }
-
     // Test reinvest after partial reward claim
     function test_ReinvestAfterPartialClaim() public {
         // User stakes tokens
@@ -236,14 +192,9 @@ contract StakeReinvestTest is Test {
         vm.startPrank(owner);
         stake.setRewardDecayFactor(1); // Release all rewards immediately
         stake.setMinRewardUpdateDelay(0); // No delay
-        stake.setMinOutPercentage(80); // Set minOutPercentage for testing
         vm.stopPrank();
 
         stake.updateRewards();
-
-        // Set minOutPercentage for testing
-        vm.prank(owner);
-        stake.setMinOutPercentage(80);
 
         // User claims half the rewards
         vm.prank(user);
@@ -290,10 +241,6 @@ contract StakeReinvestTest is Test {
 
         // Update rewards to calculate distribution
         stake.updateRewards();
-
-        // Set minOutPercentage for testing
-        vm.prank(owner);
-        stake.setMinOutPercentage(80);
 
         // Check that pending rewards are available
         uint256 pendingRewards = stake.pendingRewards(user);
