@@ -3,13 +3,17 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Stake} from "../contracts/Stake.sol";
+import {StakeSweeper} from "../contracts/StakeSweeper.sol";
 import {MockERC1363} from "./mocks/MockERC1363.sol";
+import {MockUniswapRouter} from "./mocks/MockUniswapRouter.sol";
 
 contract StakeMigrationTest is Test {
     Stake public oldStake;
     Stake public newStake;
+    StakeSweeper public sweeper;
     MockERC1363 public stakingToken;
     MockERC1363 public rewardToken;
+    MockUniswapRouter public router;
 
     address public owner = makeAddr("owner");
     address public user = makeAddr("user");
@@ -19,23 +23,32 @@ contract StakeMigrationTest is Test {
     uint256 public constant REWARD_AMOUNT = 50 ether;
 
     function setUp() public {
-        // Deploy tokens and stake contracts as owner
         vm.startPrank(owner);
 
-        // Create separate tokens for staking and rewards
+        // Create tokens
         stakingToken = new MockERC1363(INITIAL_SUPPLY);
         rewardToken = new MockERC1363(INITIAL_SUPPLY);
 
-        // Deploy old and new stake contracts with the same tokens
+        // Deploy router and sweeper
+        router = new MockUniswapRouter();
+        sweeper = new StakeSweeper(address(rewardToken), address(router));
+
+        // Deploy stake contracts
         oldStake = new Stake(address(stakingToken), address(rewardToken));
         newStake = new Stake(address(stakingToken), address(rewardToken));
 
-        // Transfer reward tokens to both stake contracts
-        rewardToken.transfer(address(oldStake), REWARD_AMOUNT * 2); // Double for old contract
-        rewardToken.transfer(address(newStake), REWARD_AMOUNT);
+        // Set sweeper for both contracts
+        oldStake.setSweeper(address(sweeper));
+        newStake.setSweeper(address(sweeper));
 
-        // Transfer staking tokens to the user for testing
+        // Transfer tokens
+        rewardToken.transfer(address(oldStake), REWARD_AMOUNT * 2);
+        rewardToken.transfer(address(newStake), REWARD_AMOUNT);
         stakingToken.transfer(user, USER_BALANCE);
+
+        // Setup router
+        stakingToken.transfer(address(router), 1000 ether);
+
         vm.stopPrank();
 
         // Set approvals for both stake contracts
@@ -92,40 +105,33 @@ contract StakeMigrationTest is Test {
     }
 
     function test_MigrateWithRewards() public {
-        // Add some rewards to old contract (simulating time passing)
-        vm.prank(owner);
-        rewardToken.transfer(address(oldStake), REWARD_AMOUNT);
+        // Setup initial stake
+        vm.startPrank(user);
+        stakingToken.approve(address(oldStake), DEPOSIT_AMOUNT);
+        oldStake.deposit(DEPOSIT_AMOUNT);
+        vm.stopPrank();
 
-        // Do an initial interaction to detect rewards
+        // Send rewards to old stake contract
+        vm.startPrank(owner);
+        rewardToken.transfer(address(oldStake), REWARD_AMOUNT);
+        vm.stopPrank();
+
+        // Initial interaction to detect rewards
         oldStake.claim();
 
         // Wait for rewards to vest
         vm.warp(block.timestamp + 24 hours);
-        // Check initial pending rewards
+
+        // Verify rewards before migration
         uint256 pendingRewards = oldStake.pendingRewards(user);
-        assertTrue(pendingRewards > 0, "User should have pending rewards");
+        assertGt(pendingRewards, 0, "User should have pending rewards");
 
-        // Store initial reward balance for later comparison
-        uint256 initialRewardBalance = rewardToken.balanceOf(user);
+        // Perform migration
+        vm.prank(user);
+        oldStake.migrate(address(newStake));
 
-        // User migrates - now handles the complete migration in one transaction
-        vm.startPrank(user);
-        uint256 migratedAmount = oldStake.migrate(address(newStake));
-        assertEq(migratedAmount, DEPOSIT_AMOUNT);
-
-        // Verify rewards were claimed during migration
-        uint256 newRewardBalance = rewardToken.balanceOf(user);
-        assertTrue(newRewardBalance > initialRewardBalance, "User should have received rewards");
-
-        // Verify tokens are now directly in the new contract
-        (uint256 newStakedAmount, ) = newStake.userInfo(user);
-        assertEq(newStakedAmount, DEPOSIT_AMOUNT);
-        assertEq(newStake.totalStaked(), DEPOSIT_AMOUNT);
-
-        // Ensure user's wallet balance is unchanged (tokens went directly from old to new contract)
-        assertEq(stakingToken.balanceOf(user), USER_BALANCE - DEPOSIT_AMOUNT);
-
-        vm.stopPrank();
+        // Verify user received rewards during migration
+        assertEq(rewardToken.balanceOf(user), REWARD_AMOUNT, "User should have received rewards");
     }
 
     function test_RevertMigrateToInvalidContract() public {

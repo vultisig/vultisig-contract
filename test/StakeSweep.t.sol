@@ -3,11 +3,13 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Stake} from "../contracts/Stake.sol";
+import {StakeSweeper} from "../contracts/StakeSweeper.sol";
 import {MockERC1363} from "./mocks/MockERC1363.sol";
 import {MockUniswapRouter} from "./mocks/MockUniswapRouter.sol";
 
 contract StakeSweepTest is Test {
     Stake public stake;
+    StakeSweeper public sweeper;
     MockERC1363 public stakingToken;
     MockERC1363 public rewardToken;
     MockERC1363 public extraToken; // Token to be swept
@@ -35,6 +37,7 @@ contract StakeSweepTest is Test {
         router = new MockUniswapRouter();
         // Set exchange rate in the router
         router.setExchangeRate(EXCHANGE_RATE);
+        sweeper = new StakeSweeper(address(rewardToken), address(router));
 
         // Fund the router with reward tokens so it can perform swaps
         rewardToken.transfer(address(router), INITIAL_SUPPLY / 10);
@@ -52,14 +55,14 @@ contract StakeSweepTest is Test {
 
         // Set router first
         vm.startPrank(owner);
-        stake.setRouter(address(router));
+        stake.setSweeper(address(sweeper));
 
         // Expect TokenSwept event
         vm.expectEmit(true, false, false, false);
         emit Stake.TokenSwept(address(extraToken), EXTRA_TOKEN_AMOUNT, EXTRA_TOKEN_AMOUNT * EXCHANGE_RATE);
 
         // Call sweep function with just the token parameter
-        uint256 amountReceived = stake.sweep(address(extraToken));
+        uint256 amountReceived = stake.sweepTokenIntoRewards(address(extraToken));
 
         // Verify sweep results
         assertEq(amountReceived, EXTRA_TOKEN_AMOUNT * EXCHANGE_RATE);
@@ -82,8 +85,8 @@ contract StakeSweepTest is Test {
 
         // Set default router
         vm.expectEmit(true, false, false, false);
-        emit Stake.RouterSet(address(router));
-        stake.setRouter(address(router));
+        emit Stake.SweeperSet(address(sweeper));
+        stake.setSweeper(address(sweeper));
         vm.stopPrank();
 
         // Check initial state
@@ -98,7 +101,7 @@ contract StakeSweepTest is Test {
         emit Stake.TokenSwept(address(extraToken), EXTRA_TOKEN_AMOUNT * 2, EXTRA_TOKEN_AMOUNT * 2 * EXCHANGE_RATE);
 
         // Call sweep function with just the token parameter (using default router)
-        uint256 amountReceived = stake.sweep(address(extraToken));
+        uint256 amountReceived = stake.sweepTokenIntoRewards(address(extraToken));
 
         // Verify sweep results
         assertEq(amountReceived, EXTRA_TOKEN_AMOUNT * 2 * EXCHANGE_RATE);
@@ -118,13 +121,13 @@ contract StakeSweepTest is Test {
 
         // Set router first (as owner)
         vm.prank(owner);
-        stake.setRouter(address(router));
+        stake.setSweeper(address(sweeper));
 
         // Sweep as a regular user (not owner)
         vm.startPrank(user);
 
         // Call sweep function with just the token parameter
-        uint256 amountReceived = stake.sweep(address(extraToken));
+        uint256 amountReceived = stake.sweepTokenIntoRewards(address(extraToken));
 
         // Verify sweep results
         assertEq(amountReceived, EXTRA_TOKEN_AMOUNT * EXCHANGE_RATE);
@@ -140,10 +143,10 @@ contract StakeSweepTest is Test {
     function test_RevertSweepStakingToken() public {
         // Set router first
         vm.startPrank(owner);
-        stake.setRouter(address(router));
+        stake.setSweeper(address(sweeper));
 
         vm.expectRevert("Stake: cannot sweep staking token");
-        stake.sweep(address(stakingToken));
+        stake.sweepTokenIntoRewards(address(stakingToken));
 
         vm.stopPrank();
     }
@@ -151,10 +154,10 @@ contract StakeSweepTest is Test {
     function test_RevertSweepRewardToken() public {
         // Set router first
         vm.startPrank(owner);
-        stake.setRouter(address(router));
+        stake.setSweeper(address(sweeper));
 
         vm.expectRevert("Stake: cannot sweep reward token");
-        stake.sweep(address(rewardToken));
+        stake.sweepTokenIntoRewards(address(rewardToken));
 
         vm.stopPrank();
     }
@@ -168,18 +171,18 @@ contract StakeSweepTest is Test {
 
         // Set router first
         vm.startPrank(owner);
-        stake.setRouter(address(router));
+        stake.setSweeper(address(sweeper));
 
         vm.expectRevert("Stake: no tokens to sweep");
-        stake.sweep(address(emptyToken));
+        stake.sweepTokenIntoRewards(address(emptyToken));
 
         vm.stopPrank();
     }
 
-    function test_RevertNoDefaultRouter() public {
+    function test_RevertNoSweeper() public {
         // Try to use sweep without a default router set
-        vm.expectRevert("Stake: default router not set");
-        stake.sweep(address(extraToken));
+        vm.expectRevert("Stake: sweeper not set");
+        stake.sweepTokenIntoRewards(address(extraToken));
     }
 
     function test_SetRouterNotOwner() public {
@@ -187,15 +190,15 @@ contract StakeSweepTest is Test {
         vm.startPrank(user);
         bytes memory encodedErrorSelector = abi.encodeWithSignature("OwnableUnauthorizedAccount(address)", user);
         vm.expectRevert(encodedErrorSelector);
-        stake.setRouter(address(router));
+        stake.setSweeper(address(sweeper));
         vm.stopPrank();
     }
 
     function test_SetRouterZeroAddress() public {
         // Try to set router to zero address
         vm.startPrank(owner);
-        vm.expectRevert("Stake: router is the zero address");
-        stake.setRouter(address(0));
+        vm.expectRevert("Stake: sweeper is zero address");
+        stake.setSweeper(address(0));
         vm.stopPrank();
     }
 
