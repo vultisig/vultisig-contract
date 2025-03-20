@@ -441,7 +441,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(balance > 0, "Stake: no tokens to sweep");
 
         // Transfer the token to the sweeper
-        token.transfer(address(sweeper), balance);
+        token.safeTransfer(address(sweeper), balance);
 
         // Execute the swap using our internal swap function
         uint256 amountOut = sweeper.sweep(_token, address(this));

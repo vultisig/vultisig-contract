@@ -95,7 +95,7 @@ contract StakeSweeper is Ownable {
         path[0] = _tokenIn;
         path[1] = _tokenOut;
 
-        IERC20(_tokenIn).approve(defaultRouter, _amountIn);
+        IERC20(_tokenIn).safeIncreaseAllowance(defaultRouter, _amountIn);
 
         // Get quote from router
         uint256[] memory amountsOut;
@@ -115,7 +115,7 @@ contract StakeSweeper is Ownable {
             _amountIn, amountOutMin, path, _recipient, block.timestamp + 1 hours
         );
 
-        IERC20(_tokenIn).approve(defaultRouter, 0);
+        IERC20(_tokenIn).safeIncreaseAllowance(defaultRouter, 0);
         return amounts[amounts.length - 1];
     }
 }
