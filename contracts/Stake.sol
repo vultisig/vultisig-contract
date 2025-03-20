@@ -333,6 +333,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(_newStakingContract != address(0), "Stake: new contract is the zero address");
         require(_newStakingContract != address(this), "Stake: cannot migrate to self");
 
+        address userAddress = msg.sender;
+
         // Ensure the target is a valid Stake contract with the same staking token
         Stake newStakingContract = Stake(_newStakingContract);
         require(
@@ -340,12 +342,12 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         );
 
         // Get user's current staked amount
-        UserInfo storage user = userInfo[msg.sender];
+        UserInfo storage user = userInfo[userAddress];
         uint256 stakedAmount = user.amount;
         require(stakedAmount > 0, "Stake: no tokens to migrate");
 
         // 1. Claim all pending rewards
-        _claim(msg.sender);
+        _claim(userAddress);
 
         // 2. Withdraw all staked tokens
         // Update user staking amount
@@ -360,7 +362,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // 4. Call depositForUser on the new contract to deposit directly with proper attribution
         bool migrationSuccess = false;
-        try newStakingContract.depositForUser(msg.sender, stakedAmount) {
+        try newStakingContract.depositForUser(userAddress, stakedAmount) {
             migrationSuccess = true;
         } catch {
             // If the depositForUser call fails, we need to transfer tokens back to the user
@@ -369,15 +371,15 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         if (!migrationSuccess) {
             // If migration failed, return tokens to the user's wallet
-            stakingToken.safeTransfer(msg.sender, stakedAmount);
+            stakingToken.safeTransfer(userAddress, stakedAmount);
         }
 
         // Clear the approval regardless of outcome
         stakingToken.approve(_newStakingContract, 0);
 
         // Emit events for withdrawal and migration
-        emit Withdrawn(msg.sender, stakedAmount);
-        emit Migrated(msg.sender, _newStakingContract, stakedAmount);
+        emit Withdrawn(userAddress, stakedAmount);
+        emit Migrated(userAddress, _newStakingContract, stakedAmount);
 
         return stakedAmount;
     }
@@ -439,7 +441,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         require(balance > 0, "Stake: no tokens to sweep");
 
         // Transfer the token to the sweeper
-        token.safeTransfer(address(sweeper), balance);
+        token.transfer(address(sweeper), balance);
 
         // Execute the swap using our internal swap function
         uint256 amountOut = sweeper.sweep(_token, address(this));
@@ -463,19 +465,21 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function reinvest() external nonReentrant returns (uint256) {
         require(address(sweeper) != address(0), "Stake: sweeper not set");
 
+        address userAddress = msg.sender;
+
         // Step 1: Update rewards to ensure all pending rewards are accounted for
         updateRewards();
 
         // Step 2: Check if user has pending rewards to reinvest
-        UserInfo storage user = userInfo[msg.sender];
+        UserInfo storage user = userInfo[userAddress];
         uint256 pending = (user.amount * accRewardPerShare) / 1e12 - user.rewardDebt;
         require(pending > 0, "Stake: no rewards to reinvest");
 
         // Step 3: Claim rewards internally
-        uint256 rewardAmount = _claimRewards(msg.sender);
+        uint256 rewardAmount = _claimRewards(userAddress);
 
         // Emit RewardClaimed event
-        emit RewardClaimed(msg.sender, rewardAmount);
+        emit RewardClaimed(userAddress, rewardAmount);
 
         // Transfer reward token to sweeper
         rewardToken.safeTransfer(address(sweeper), rewardAmount);
@@ -503,8 +507,8 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Update user reward debt
         user.rewardDebt = (user.amount * accRewardPerShare) / 1e12;
 
-        emit Deposited(msg.sender, stakingTokenBalanceDelta);
-        emit Reinvested(msg.sender, rewardAmount, stakingTokenBalanceDelta);
+        emit Deposited(userAddress, stakingTokenBalanceDelta);
+        emit Reinvested(userAddress, rewardAmount, stakingTokenBalanceDelta);
 
         return stakingTokenBalanceDelta;
     }
