@@ -182,4 +182,165 @@ contract StakeTest is Test {
         stake.onApprovalReceived(user, 100 ether, "");
         vm.stopPrank();
     }
+
+    function test_RewardAccumulation() public {
+        uint256 depositAmount = 100 ether;
+
+        // Initial deposit
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Simulate new rewards coming in
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), 100 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Update rewards
+        stake.updateRewards();
+
+        // Check pending rewards
+        uint256 pending = stake.pendingRewards(user);
+        assertGt(pending, 0, "Should have pending rewards");
+    }
+
+    function test_Claim() public {
+        uint256 depositAmount = 100 ether;
+
+        // Initial deposit
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Simulate new rewards coming in
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), 100 ether);
+
+        vm.warp(block.timestamp + 1 days);
+
+        // Update rewards and claim
+        vm.startPrank(user);
+        uint256 claimedAmount = stake.claim();
+        vm.stopPrank();
+
+        assertGt(claimedAmount, 0, "Should have claimed rewards");
+        assertEq(rewardToken.balanceOf(user), claimedAmount, "User should receive reward tokens");
+    }
+
+    function test_ForceWithdraw() public {
+        uint256 depositAmount = 100 ether;
+
+        // Initial deposit
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+
+        vm.expectEmit(true, false, false, true);
+        emit Stake.ForceWithdrawn(user, depositAmount);
+        stake.forceWithdraw(depositAmount);
+
+        (uint256 stakedAmount,) = stake.userInfo(user);
+        assertEq(stakedAmount, 0, "Should have no staked tokens");
+        assertEq(stakingToken.balanceOf(user), USER_BALANCE, "Should have received all staking tokens back");
+        vm.stopPrank();
+    }
+
+    function test_SetRewardDecayFactor() public {
+        uint256 newFactor = 5;
+
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true);
+        emit Stake.RewardDecayFactorSet(newFactor);
+        stake.setRewardDecayFactor(newFactor);
+
+        assertEq(stake.rewardDecayFactor(), newFactor);
+    }
+
+    function test_RevertSetRewardDecayFactorZero() public {
+        vm.prank(owner);
+        vm.expectRevert("Stake: decay factor must be greater than 0");
+        stake.setRewardDecayFactor(0);
+    }
+
+    function test_SetMinRewardUpdateDelay() public {
+        uint256 newDelay = 12 hours;
+
+        vm.prank(owner);
+        vm.expectEmit(true, false, false, true);
+        emit Stake.MinRewardUpdateDelaySet(newDelay);
+        stake.setMinRewardUpdateDelay(newDelay);
+
+        assertEq(stake.minRewardUpdateDelay(), newDelay);
+    }
+
+    function test_RewardUpdateWithNoStakers() public {
+        // Send rewards when no one is staking
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), 100 ether);
+
+        stake.updateRewards();
+
+        // New staker joins
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), 100 ether);
+        stake.deposit(100 ether);
+        vm.stopPrank();
+
+        // Check that rewards were properly tracked
+        uint256 pending = stake.pendingRewards(user);
+        assertEq(pending, 0, "New staker should not receive previous rewards");
+    }
+
+    function test_MultipleStakers() public {
+        address user2 = makeAddr("user2");
+        uint256 depositAmount = 100 ether;
+
+        // Setup user2 with tokens
+        vm.prank(owner);
+        stakingToken.transfer(user2, USER_BALANCE);
+
+        // Both users deposit the same amount
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        vm.startPrank(user2);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Add rewards
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), 100 ether);
+
+        stake.updateRewards();
+
+        // Check equal pending rewards
+        uint256 pending1 = stake.pendingRewards(user);
+        uint256 pending2 = stake.pendingRewards(user2);
+        assertEq(pending1, pending2, "Both users should have equal pending rewards");
+    }
+
+    function test_DepositForUser() public {
+        address depositor = makeAddr("depositor");
+        uint256 depositAmount = 100 ether;
+
+        // Give depositor some tokens
+        vm.prank(owner);
+        stakingToken.transfer(depositor, depositAmount);
+
+        // Depositor deposits for user
+        vm.startPrank(depositor);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.depositForUser(user, depositAmount);
+        vm.stopPrank();
+
+        (uint256 stakedAmount,) = stake.userInfo(user);
+        assertEq(stakedAmount, depositAmount, "User should have received the deposit");
+        assertEq(stakingToken.balanceOf(depositor), 0, "Depositor should have spent their tokens");
+    }
 }
