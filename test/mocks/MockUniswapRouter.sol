@@ -14,10 +14,20 @@ contract MockUniswapRouter is IUniswapRouter {
 
     // Mock exchange rate: 1 input token = exchangeRate output tokens
     uint256 public exchangeRate = 2; // Default 2x for testing
+    bool public failQuote;
+    bool public invalidQuoteLength;
 
     function setExchangeRate(uint256 _rate) external {
         require(_rate > 0, "Exchange rate must be positive");
         exchangeRate = _rate;
+    }
+
+    function setFailQuote(bool _fail) external {
+        failQuote = _fail;
+    }
+
+    function setInvalidQuoteLength(bool _invalid) external {
+        invalidQuoteLength = _invalid;
     }
 
     /**
