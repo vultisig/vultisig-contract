@@ -77,6 +77,7 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
+        vm.warp(block.timestamp + 1);
         // Update rewards to calculate distribution
         stake.updateRewards();
 
@@ -194,6 +195,7 @@ contract StakeReinvestTest is Test {
         stake.setMinRewardUpdateDelay(0); // No delay
         vm.stopPrank();
 
+        vm.warp(vm.getBlockTimestamp() + 1);
         stake.updateRewards();
 
         // User claims half the rewards
@@ -204,6 +206,7 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
+        vm.warp(vm.getBlockTimestamp() + 1);
         // Update rewards again to make new rewards available
         stake.updateRewards();
 
@@ -239,6 +242,7 @@ contract StakeReinvestTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), REWARD_AMOUNT);
 
+        vm.warp(block.timestamp + 1);
         // Update rewards to calculate distribution
         stake.updateRewards();
 

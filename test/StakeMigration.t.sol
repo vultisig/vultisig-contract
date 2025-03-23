@@ -102,6 +102,7 @@ contract StakeMigrationTest is Test {
         oldStake.setRewardDecayFactor(1); // No decay (release all rewards)
         vm.stopPrank();
 
+        vm.warp(block.timestamp + 1);
         // Update rewards - with the parameters set above, all rewards will be processed
         oldStake.updateRewards();
 
@@ -208,6 +209,7 @@ contract StakeMigrationTest is Test {
         oldStake.setRewardDecayFactor(1);
         vm.stopPrank();
 
+        vm.warp(block.timestamp + 1);
         // Update rewards to distribute them
         oldStake.updateRewards();
 

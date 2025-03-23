@@ -196,7 +196,7 @@ contract StakeTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), 100 ether);
 
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(block.timestamp + 1 days + 1);
 
         // Update rewards
         stake.updateRewards();
@@ -219,7 +219,7 @@ contract StakeTest is Test {
         vm.prank(owner);
         rewardToken.transfer(address(stake), 100 ether);
 
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(block.timestamp + 1 days + 1);
 
         // Update rewards and claim
         vm.startPrank(user);
@@ -544,7 +544,7 @@ contract StakeTest is Test {
         rewardToken.transfer(address(stake), initialRewards);
 
         // Advance time and update rewards
-        vm.warp(block.timestamp + 1 days);
+        vm.warp(block.timestamp + 1 days + 1);
         stake.updateRewards();
 
         // Maliciously transfer out most of the reward tokens to simulate a balance shortage
