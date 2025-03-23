@@ -528,14 +528,14 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
 
         // Check if we have enough reward token balance
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
-        uint256 rewardAmount = pending > currentRewardBalance ? currentRewardBalance : pending;
+        require(pending <= currentRewardBalance, "Stake: insufficient reward token balance");
 
         // Important: Update lastRewardBalance to track that these tokens are being claimed
-        lastRewardBalance -= rewardAmount;
+        lastRewardBalance -= pending;
 
         // Update reward debt to reflect that rewards have been claimed
         user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING;
 
-        return rewardAmount;
+        return pending;
     }
 }
