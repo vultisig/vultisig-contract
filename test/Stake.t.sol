@@ -522,4 +522,55 @@ contract StakeTest is Test {
         uint256 expectedRemaining = (remainingInitial - secondReleaseInitial) + (newRewards - firstReleaseNew);
         assertApproxEqRel(rewardToken.balanceOf(address(stake)), expectedRemaining, 1e16, "Remaining balance incorrect");
     }
+
+    function test_RevertInsufficientRewardBalance() public {
+        // Setup initial variables
+        uint256 depositAmount = 100 ether;
+        uint256 initialRewards = 10 ether;
+
+        // Remove all rewards from the contract
+        uint256 initialRewardBalance = rewardToken.balanceOf(address(stake));
+        vm.prank(address(stake));
+        rewardToken.transfer(owner, initialRewardBalance);
+
+        // Initial deposit from user
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), depositAmount);
+        stake.deposit(depositAmount);
+        vm.stopPrank();
+
+        // Send some rewards to the contract
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), initialRewards);
+
+        // Advance time and update rewards
+        vm.warp(block.timestamp + 1 days);
+        stake.updateRewards();
+
+        // Maliciously transfer out most of the reward tokens to simulate a balance shortage
+        // (This could happen if the owner withdraws rewards incorrectly or there's a bug)
+        vm.prank(address(stake));
+        rewardToken.transfer(owner, initialRewards - 1); // Leave 1 wei in contract
+
+        // Try to claim rewards - should revert due to insufficient balance
+        vm.startPrank(user);
+        vm.expectRevert("Stake: insufficient reward token balance");
+        stake.claim();
+        vm.stopPrank();
+
+        // Verify that a smaller claim would still work
+        // Return some rewards to the contract
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), 1 ether);
+
+        // Now claiming should succeed
+        vm.prank(user);
+        uint256 claimedAmount = stake.claim();
+        assertGt(claimedAmount, 0, "Should have claimed some rewards");
+        assertLe(
+            claimedAmount,
+            rewardToken.balanceOf(address(stake)) + claimedAmount,
+            "Claimed amount should not exceed contract balance"
+        );
+    }
 }
