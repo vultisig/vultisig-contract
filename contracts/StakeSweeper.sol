@@ -115,7 +115,7 @@ contract StakeSweeper is Ownable {
             _amountIn, amountOutMin, path, _recipient, block.timestamp + 1 hours
         );
 
-        IERC20(_tokenIn).safeIncreaseAllowance(defaultRouter, 0);
+        IERC20(_tokenIn).forceApprove(defaultRouter, 0);
         return amounts[amounts.length - 1];
     }
 }
