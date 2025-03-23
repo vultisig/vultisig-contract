@@ -108,7 +108,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         }
 
         uint256 currentRewardBalance = rewardToken.balanceOf(address(this));
-        bool timeDelayMet = (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay);
+        bool timeDelayMet = (block.timestamp > lastRewardUpdateTime + minRewardUpdateDelay);
 
         // If there are new rewards and enough time has passed (or delay is set to 0)
         if (currentRewardBalance > lastRewardBalance && timeDelayMet) {
@@ -151,7 +151,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
 
             // Apply decay and time check based on configured parameters
-            if (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay) {
+            if (block.timestamp > lastRewardUpdateTime + minRewardUpdateDelay) {
                 // Apply decay - only consider a fraction of the new rewards unless decay factor is 1
                 additionalRewards = totalNewRewards / rewardDecayFactor;
             }
