@@ -178,6 +178,12 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         // Get user info
         UserInfo storage user = userInfo[_user];
 
+        // Calculate pending rewards before updating user amounts
+        uint256 pending = 0;
+        if (user.amount > 0) {
+            pending = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING - user.rewardDebt;
+        }
+
         // Transfer tokens from the depositor to this contract
         stakingToken.safeTransferFrom(_depositor, address(this), _amount);
 
@@ -186,7 +192,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         totalStaked += _amount;
 
         // Update user reward debt
-        user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING;
+        user.rewardDebt = (user.amount * accRewardPerShare) / REWARD_DECAY_FACTOR_SCALING - pending;
 
         emit Deposited(_user, _amount);
     }
