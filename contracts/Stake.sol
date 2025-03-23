@@ -366,10 +366,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         bool migrationSuccess = false;
         try newStakingContract.depositForUser(userAddress, stakedAmount) {
             migrationSuccess = true;
-        } catch {
-            // If the depositForUser call fails, we need to transfer tokens back to the user
-            migrationSuccess = false;
-        }
+        } catch {}
 
         if (!migrationSuccess) {
             // If migration failed, return tokens to the user's wallet
