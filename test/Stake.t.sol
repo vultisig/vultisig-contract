@@ -573,4 +573,64 @@ contract StakeTest is Test {
             "Claimed amount should not exceed contract balance"
         );
     }
+
+    function test_PreservePendingRewardsOnDeposit() public {
+        // Setup initial variables
+        uint256 initialDeposit = 100 ether;
+        uint256 additionalDeposit = 50 ether;
+        uint256 rewardAmount = 1000 ether;
+
+        // Initial deposit
+        vm.startPrank(user);
+        stakingToken.approve(address(stake), initialDeposit + additionalDeposit);
+        stake.deposit(initialDeposit);
+        vm.stopPrank();
+
+        // Add rewards
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+
+        // Advance time and update rewards
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
+        stake.updateRewards();
+
+        // Record pending rewards before second deposit
+        uint256 pendingBeforeDeposit = stake.pendingRewards(user);
+        assertGt(pendingBeforeDeposit, 0, "Should have pending rewards before second deposit");
+
+        // Make second deposit
+        vm.prank(user);
+        stake.deposit(additionalDeposit);
+
+        // Check pending rewards immediately after deposit
+        uint256 pendingAfterDeposit = stake.pendingRewards(user);
+        assertEq(
+            pendingAfterDeposit, pendingBeforeDeposit, "Pending rewards should be preserved after additional deposit"
+        );
+
+        // Add more rewards
+        vm.prank(owner);
+        rewardToken.transfer(address(stake), rewardAmount);
+
+        // Advance time and update rewards again
+        vm.warp(vm.getBlockTimestamp() + 1 days + 1);
+        stake.updateRewards();
+
+        // Check final rewards
+        uint256 finalPending = stake.pendingRewards(user);
+        assertGt(finalPending, pendingAfterDeposit, "Should have accrued more rewards");
+
+        // Claim rewards and verify the amount includes both periods
+        vm.prank(user);
+        uint256 claimedAmount = stake.claim();
+        assertEq(claimedAmount, finalPending, "Claimed amount should match final pending rewards");
+        assertGt(claimedAmount, pendingBeforeDeposit, "Claimed amount should be greater than initial pending rewards");
+
+        // Verify the reward debt was properly updated
+        (uint256 stakedAmount, uint256 rewardDebt) = stake.userInfo(user);
+        assertEq(stakedAmount, initialDeposit + additionalDeposit, "Staked amount should be sum of deposits");
+        assertEq(
+            rewardDebt, (stakedAmount * stake.accRewardPerShare()) / 1e26, "Reward debt should be properly updated"
+        );
+    }
 }
