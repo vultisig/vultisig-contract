@@ -111,11 +111,11 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
         bool timeDelayMet = (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay);
 
         // If there are new rewards and enough time has passed (or delay is set to 0)
-        if (currentRewardBalance > lastRewardBalance && (timeDelayMet || minRewardUpdateDelay == 0)) {
+        if (currentRewardBalance > lastRewardBalance && timeDelayMet) {
             uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
 
             // Apply decay factor (if decay factor is 1, all rewards are released)
-            uint256 releasedRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
+            uint256 releasedRewards = totalNewRewards / rewardDecayFactor;
 
             // Update accRewardPerShare based on released rewards
             // Scaled by REWARD_DECAY_FACTOR_SCALING to avoid precision loss when dividing small numbers
@@ -151,9 +151,9 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
             uint256 totalNewRewards = currentRewardBalance - lastRewardBalance;
 
             // Apply decay and time check based on configured parameters
-            if (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay || minRewardUpdateDelay == 0) {
+            if (block.timestamp >= lastRewardUpdateTime + minRewardUpdateDelay) {
                 // Apply decay - only consider a fraction of the new rewards unless decay factor is 1
-                additionalRewards = rewardDecayFactor == 1 ? totalNewRewards : totalNewRewards / rewardDecayFactor;
+                additionalRewards = totalNewRewards / rewardDecayFactor;
             }
 
             if (additionalRewards > 0) {
