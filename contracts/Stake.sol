@@ -309,6 +309,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
     function onApprovalReceived(address owner, uint256 value, bytes calldata /* data */ )
         external
         override
+        nonReentrant
         returns (bytes4)
     {
         require(msg.sender == address(stakingToken), "Stake: caller is not the staking token");
