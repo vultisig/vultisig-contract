@@ -408,6 +408,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      */
     function setRewardDecayFactor(uint256 _newFactor) external onlyOwner {
         require(_newFactor > 0, "Stake: decay factor must be greater than 0");
+        updateRewards();
         rewardDecayFactor = _newFactor;
         emit RewardDecayFactorSet(_newFactor);
     }
@@ -418,6 +419,7 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param _newDelay The new minimum delay in seconds
      */
     function setMinRewardUpdateDelay(uint256 _newDelay) external onlyOwner {
+        updateRewards();
         minRewardUpdateDelay = _newDelay;
         emit MinRewardUpdateDelaySet(_newDelay);
     }
