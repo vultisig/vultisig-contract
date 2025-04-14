@@ -21,13 +21,14 @@ contract StakeTest is Test {
 
         // Create separate tokens for staking and rewards
         stakingToken = new MockERC1363(INITIAL_SUPPLY);
-        rewardToken = new MockERC1363(INITIAL_SUPPLY);
+        // Use 6 decimals for reward token (USDC)
+        rewardToken = new MockERC1363(1_000_000_000 * 10 ** 6); // 1B USDC
 
         // Deploy stake contract with different tokens for staking and rewards
         stake = new Stake(address(stakingToken), address(rewardToken));
 
-        // Transfer reward tokens to the stake contract
-        rewardToken.transfer(address(stake), INITIAL_SUPPLY / 2);
+        // Transfer reward tokens to the stake contract (500M USDC)
+        rewardToken.transfer(address(stake), 500_000_000 * 10 ** 6);
 
         // Transfer staking tokens to the user for testing
         stakingToken.transfer(user, USER_BALANCE);
@@ -65,7 +66,7 @@ contract StakeTest is Test {
         // Only staking tokens should be transferred to the contract
         assertEq(stakingToken.balanceOf(address(stake)), amount);
         // Reward token balance should remain unchanged
-        assertEq(rewardToken.balanceOf(address(stake)), INITIAL_SUPPLY / 2);
+        assertEq(rewardToken.balanceOf(address(stake)), 500_000_000 * 10 ** 6);
         vm.stopPrank();
     }
 
@@ -84,7 +85,7 @@ contract StakeTest is Test {
         // Only staking tokens should be transferred to the contract
         assertEq(stakingToken.balanceOf(address(stake)), amount);
         // Reward token balance should remain unchanged
-        assertEq(rewardToken.balanceOf(address(stake)), INITIAL_SUPPLY / 2);
+        assertEq(rewardToken.balanceOf(address(stake)), 500_000_000 * 10 ** 6);
         vm.stopPrank();
     }
 
@@ -117,7 +118,7 @@ contract StakeTest is Test {
         assertEq(stakingToken.balanceOf(address(stake)), 0);
         // Get the actual reward token balance from contract
         uint256 rewardTokenBalance = rewardToken.balanceOf(address(stake));
-        assertEq(rewardTokenBalance, 500000000000000000000000);
+        assertEq(rewardTokenBalance, 500_000_000 * 10 ** 6);
 
         // User should get back their staking tokens
         assertEq(stakingToken.balanceOf(user), USER_BALANCE);
@@ -146,7 +147,7 @@ contract StakeTest is Test {
         assertEq(stakingToken.balanceOf(address(stake)), depositAmount - withdrawAmount);
         // Get the actual reward token balance from contract
         uint256 rewardTokenBalance = rewardToken.balanceOf(address(stake));
-        assertEq(rewardTokenBalance, 500000000000000000000000);
+        assertEq(rewardTokenBalance, 500_000_000 * 10 ** 6);
 
         // User should get back their staking tokens proportionally
         assertEq(stakingToken.balanceOf(user), USER_BALANCE - depositAmount + withdrawAmount);
@@ -192,9 +193,9 @@ contract StakeTest is Test {
         stake.deposit(depositAmount);
         vm.stopPrank();
 
-        // Simulate new rewards coming in
+        // Simulate new rewards coming in (100k USDC)
         vm.prank(owner);
-        rewardToken.transfer(address(stake), 100 ether);
+        rewardToken.transfer(address(stake), 100_000 * 10 ** 6);
 
         vm.warp(block.timestamp + 1 days + 1);
 
@@ -217,7 +218,7 @@ contract StakeTest is Test {
 
         // Simulate new rewards coming in
         vm.prank(owner);
-        rewardToken.transfer(address(stake), 100 ether);
+        rewardToken.transfer(address(stake), 100_000 * 10 ** 6);
 
         vm.warp(block.timestamp + 1 days + 1);
 
@@ -279,7 +280,7 @@ contract StakeTest is Test {
     function test_RewardUpdateWithNoStakers() public {
         // Send rewards when no one is staking
         vm.prank(owner);
-        rewardToken.transfer(address(stake), 100 ether);
+        rewardToken.transfer(address(stake), 100_000 * 10 ** 6);
 
         vm.warp(block.timestamp + 1 days);
 
@@ -315,9 +316,9 @@ contract StakeTest is Test {
         stake.deposit(depositAmount);
         vm.stopPrank();
 
-        // Add rewards
+        // Add rewards (100k USDC)
         vm.prank(owner);
-        rewardToken.transfer(address(stake), 100 ether);
+        rewardToken.transfer(address(stake), 100_000 * 10 ** 6);
 
         vm.warp(block.timestamp + 1 days);
 
@@ -351,7 +352,7 @@ contract StakeTest is Test {
     function test_ComplexRewardScenario() public {
         assertEq(stake.rewardDecayFactor(), 10);
         // Setup initial variables
-        uint256 largeReward = 2000 ether;
+        uint256 largeReward = 2_000_000 * 10 ** 6; // 2M USDC (using 6 decimals)
         uint256 weekDelay = 7 days;
         uint256 dayDelay = 1 days;
         address[] memory users = new address[](5);
@@ -360,14 +361,19 @@ contract StakeTest is Test {
         // Create 5 users with different stake amounts
         for (uint256 i = 0; i < 5; i++) {
             users[i] = makeAddr(string.concat("user", vm.toString(i)));
-            stakes[i] = (i + 1) * 1 ether; // 100, 200, 300, 400, 500 ether stakes
+            stakes[i] = (i + 1) * 100 ether; // 100, 200, 300, 400, 500 ether stakes
 
             // Setup each user with staking tokens
             vm.prank(owner);
             stakingToken.transfer(users[i], stakes[i]);
         }
 
-        // 1. Transfer large reward with no stakers
+        // First, clear any USDC from the staking contract
+        vm.startPrank(address(stake));
+        rewardToken.transfer(owner, rewardToken.balanceOf(address(stake)));
+        vm.stopPrank();
+
+        // 1. Transfer large reward with no stakers (2M USDC)
         vm.prank(owner);
         rewardToken.transfer(address(stake), largeReward);
 
@@ -425,7 +431,7 @@ contract StakeTest is Test {
             // Each user should have pending rewards proportional to their stake
             // Consider the decay factor of 10 (10% released)
             uint256 expectedReward = ((initialRewardBalance / 10) * stakes[i]) / totalStakedAmount;
-            assertApproxEqRel(pending, expectedReward, 1e16); // 1% tolerance
+            assertApproxEqRel(pending, expectedReward, 1e6); // 1% tolerance
         }
 
         // User4 hasn't staked yet, should have 0 pending
@@ -443,8 +449,8 @@ contract StakeTest is Test {
         vm.stopPrank();
 
         // 7. Continue reward distribution with shorter delay
-        // Add some new rewards
-        uint256 newRewards = 100000 ether;
+        // Add some new rewards (100k USDC)
+        uint256 newRewards = 100_000 * 10 ** 6;
         vm.prank(owner);
         rewardToken.transfer(address(stake), newRewards);
 
@@ -457,13 +463,16 @@ contract StakeTest is Test {
 
         // For initial rewards:
         // First release was 10% of initialRewardBalance
-        uint256 remainingInitial = (initialRewardBalance * 9) / 10;
+        uint256 remainingInitial = initialRewardBalance - (initialRewardBalance / 10);
+        assertEq(remainingInitial, 1_800_000 * 10 ** 6, "Remaining initial should be 1.8M USDC");
         uint256 secondReleaseInitial = remainingInitial / 10;
+        assertEq(secondReleaseInitial, 180_000 * 10 ** 6, "Second release initial should be 180k USDC");
 
         // For new rewards:
         uint256 firstReleaseNew = newRewards / 10;
 
         uint256 totalDistributing = secondReleaseInitial + firstReleaseNew;
+        assertEq(totalDistributing, 190_000 * 10 ** 6, "Total distributing should be 190k USDC");
 
         // Calculate expected rewards for each user
         uint256[] memory expectedRewards = new uint256[](5);
@@ -511,14 +520,26 @@ contract StakeTest is Test {
             totalClaimed += claimedAmounts[i];
         }
 
+        // Calculate total claimed amount that we expect:
+        // First distribution: 10% of 2M USDC = 200,000 USDC
+        // Second distribution:
+        // - 10% of remaining initial (1.8M USDC) = 180,000 USDC
+        // - 10% of new rewards (100k USDC) = 10,000 USDC
+        // Total distributed = 200,000 + (180,000 + 10,000) = 390,000 USDC
+
         // Total claimed should be approximately secondReleaseInitial + firstReleaseNew
-        assertApproxEqRel(totalClaimed, 105380000000000000000000, 1e16, "Total claimed amount incorrect");
+        assertApproxEqRel(
+            totalClaimed,
+            390_000 * 10 ** 6, // 390k USDC
+            1e16,
+            "Total claimed amount incorrect"
+        );
 
         // Verify remaining reward balance
         // Should be:
-        // Initial: 900000 - 90000 = 810000
-        // New: 100000 - 10000 = 90000
-        // Total: 810000 + 90000 = 900000
+        // Initial: 2M - 200k - 180k = 1.62M USDC
+        // New: 100k - 10k = 90k USDC
+        // Total: 1.62M USDC + 90k USDC = 1.71M USDC
         uint256 expectedRemaining = (remainingInitial - secondReleaseInitial) + (newRewards - firstReleaseNew);
         assertApproxEqRel(rewardToken.balanceOf(address(stake)), expectedRemaining, 1e16, "Remaining balance incorrect");
     }
@@ -526,7 +547,7 @@ contract StakeTest is Test {
     function test_RevertInsufficientRewardBalance() public {
         // Setup initial variables
         uint256 depositAmount = 100 ether;
-        uint256 initialRewards = 10 ether;
+        uint256 initialRewards = 10_000 * 10 ** 6; // 10k USDC
 
         // Remove all rewards from the contract
         uint256 initialRewardBalance = rewardToken.balanceOf(address(stake));
@@ -561,7 +582,7 @@ contract StakeTest is Test {
         // Verify that a smaller claim would still work
         // Return some rewards to the contract
         vm.prank(owner);
-        rewardToken.transfer(address(stake), 1 ether);
+        rewardToken.transfer(address(stake), 1_000 * 10 ** 6); // 1k USDC
 
         // Now claiming should succeed
         vm.prank(user);
@@ -578,7 +599,7 @@ contract StakeTest is Test {
         // Setup initial variables
         uint256 initialDeposit = 100 ether;
         uint256 additionalDeposit = 50 ether;
-        uint256 rewardAmount = 1000 ether;
+        uint256 rewardAmount = 1_000_000 * 10 ** 6; // 1M USDC
 
         // Initial deposit
         vm.startPrank(user);

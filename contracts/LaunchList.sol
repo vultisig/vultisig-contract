@@ -47,16 +47,17 @@ contract LaunchList is Ownable {
     // Uniswap V3 Oracle pool address
     address public uniswapV3OraclePool;
 
-    // Mapping of user addresses to their ETH spent during limited phases
-    mapping(address => uint256) public addressEthSpent;
+    // Mapping of user addresses to their USDC spent during limited phases
+    mapping(address => uint256) public addressUsdcSpent;
 
     // Purchase limits by phase
-    uint256 public phase1EthLimit = 1 ether;
-    uint256 public phase2EthLimit = 4 ether;
+    uint256 public phase1UsdcLimit = 1000 * 10 ** 6;
+    uint256 public phase2UsdcLimit = 4000 * 10 ** 6;
 
     // Add this state variable
     address public constant UNISWAP_QUOTER = 0x5e55C9e631FAE526cd4B0526C4818D6e0a9eF0e3;
-    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // Mainnet WETH address
+    address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // Mainnet USDC
+    uint8 public constant USDC_DECIMALS = 6;
 
     // Events
     event PhaseAdvanced(Phase newPhase);
@@ -65,9 +66,9 @@ contract LaunchList is Ownable {
     event LaunchListPoolAdded(address indexed pool);
     event PoolRemovedFromLaunchList(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
-    event EthSpent(address indexed user, uint256 amount, uint256 total);
+    event UsdcSpent(address indexed user, uint256 amount, uint256 total);
     event PhaseLimitsUpdated(
-        uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
+        uint256 oldPhase1UsdcLimit, uint256 oldPhase2UsdcLimit, uint256 newPhase1UsdcLimit, uint256 newPhase2UsdcLimit
     );
     /**
      * @dev Constructor
@@ -77,15 +78,15 @@ contract LaunchList is Ownable {
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.LAUNCH_LIST_ONLY;
         emit PhaseAdvanced(currentPhase);
-        emit PhaseLimitsUpdated(0, 0, phase1EthLimit, phase2EthLimit);
+        emit PhaseLimitsUpdated(0, 0, phase1UsdcLimit, phase2UsdcLimit);
     }
 
-    function setPhaseLimits(uint256 phase1EthLimit_, uint256 phase2EthLimit_) external onlyOwner {
-        uint256 oldPhase1EthLimit = phase1EthLimit;
-        uint256 oldPhase2EthLimit = phase2EthLimit;
-        phase1EthLimit = phase1EthLimit_;
-        phase2EthLimit = phase2EthLimit_;
-        emit PhaseLimitsUpdated(oldPhase1EthLimit, oldPhase2EthLimit, phase1EthLimit_, phase2EthLimit_);
+    function setPhaseLimits(uint256 phase1UsdcLimit_, uint256 phase2UsdcLimit_) external onlyOwner {
+        uint256 oldPhase1UsdcLimit = phase1UsdcLimit;
+        uint256 oldPhase2UsdcLimit = phase2UsdcLimit;
+        phase1UsdcLimit = phase1UsdcLimit_;
+        phase2UsdcLimit = phase2UsdcLimit_;
+        emit PhaseLimitsUpdated(oldPhase1UsdcLimit, oldPhase2UsdcLimit, phase1UsdcLimit_, phase2UsdcLimit_);
     }
 
     // ==================== Phase Management ====================
@@ -288,44 +289,38 @@ contract LaunchList is Ownable {
             );
         }
 
-        // Phase 1 & 2: Launch list pools trading with ETH limits
+        // Phase 1 & 2: Launch list pools trading with USDC limits
         if (currentPhase == Phase.LIMITED_POOL_TRADING || currentPhase == Phase.EXTENDED_POOL_TRADING) {
-            // If recipient is a launch list pool, check ETH spending limits
+            // If recipient is a launch list pool, check USDC spending limits
             if (isPoolOnLaunchList(from) && isAddressOnLaunchList(to)) {
-                uint256 ethValue = getEthValueForToken(amount);
-                uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1EthLimit : phase2EthLimit;
+                uint256 usdcValue = getUsdcValueForToken(amount);
+                uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1UsdcLimit : phase2UsdcLimit;
 
-                if (addressEthSpent[to] + ethValue <= limit) {
-                    // Update user's ETH spent if the transaction is going through
-                    addressEthSpent[to] += ethValue;
-                    emit EthSpent(to, ethValue, addressEthSpent[to]);
+                if (addressUsdcSpent[to] + usdcValue <= limit) {
+                    // Update user's USDC spent if the transaction is going through
+                    addressUsdcSpent[to] += usdcValue;
+                    emit UsdcSpent(to, usdcValue, addressUsdcSpent[to]);
                     return true;
                 }
                 return false;
             } else if (isAddressOnLaunchList(from) && isPoolOnLaunchList(to)) {
-                // If sender is a launch list address and recipient is a launch list pool, allow transaction
                 return true;
             } else if (isPoolOnLaunchList(from) && isPoolOnLaunchList(to)) {
-                // If both sender and recipient are launch list pools, allow transaction
-                // to support routers and solvers
                 return true;
             }
-
-            // If sending to address that's not a launch list pool, deny transaction
             return false;
         }
 
-        // Default: deny transaction
         return false;
     }
 
     /**
-     * @dev Gets the ETH value for a token amount using Uniswap V3 Quoter, or returns the starting
+     * @dev Gets the USDC value for a token amount using Uniswap V3 Quoter, or returns the starting
      * amount if no trades have been made on the pool
      * @param tokenAmount Amount of tokens
-     * @return ethValue Equivalent ETH value
+     * @return usdcValue Equivalent USDC value
      */
-    function getEthValueForToken(uint256 tokenAmount) public view returns (uint256) {
+    function getUsdcValueForToken(uint256 tokenAmount) public view returns (uint256) {
         require(uniswapV3OraclePool != address(0), "Oracle pool not set");
 
         // Get the token addresses from the pool
@@ -333,8 +328,8 @@ contract LaunchList is Ownable {
         address token1 = IUniswapV3Pool(uniswapV3OraclePool).token1();
         uint24 fee = IUniswapV3Pool(uniswapV3OraclePool).fee();
 
-        // Determine which token is WETH and which is our token
-        (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
+        // Determine which token is USDC and which is our token
+        (address tokenIn, address tokenOut) = token0 == USDC ? (token1, token0) : (token0, token1);
 
         try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
             IQuoter.QuoteExactInputSingleParams({
@@ -344,13 +339,11 @@ contract LaunchList is Ownable {
                 fee: fee,
                 sqrtPriceLimitX96: 0
             })
-        ) returns (
-            uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
-        ) {
+        ) returns (uint256 amountReceived, uint160, uint32, uint256) {
             return amountReceived;
         } catch {
             // Fallback to initial price if quote fails
-            return tokenAmount / 10 ** 18; // 0.0001 ETH per token initial price
+            return (tokenAmount * 10 ** USDC_DECIMALS) / 10 ** 18; // 1 token = 1 USDC initial price
         }
     }
 }

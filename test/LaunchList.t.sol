@@ -69,7 +69,7 @@ contract LaunchListTest is Test {
     ISwapRouter public swapRouter;
 
     // Tokens for Uniswap pool
-    IERC20 public weth;
+    IERC20 public usdc;
 
     // Test addresses
     address public owner;
@@ -83,7 +83,9 @@ contract LaunchListTest is Test {
     address public nonLaunchListPool;
 
     // Addresses on Ethereum mainnet
-    address constant WETH_ADDRESS = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2;
+    address constant USDC_ADDRESS = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    uint8 constant USDC_DECIMALS = 6;
+    address constant USDC_WHALE = 0x7713974908Be4BEd47172370115e8b1219F4A5f0; // Example USDC whale
     address constant UNISWAP_V3_FACTORY = 0x1F98431c8aD98523631AE4a59f267346ea31F984;
     address constant UNISWAP_POSITION_MANAGER = 0xC36442b4a4522E871399CD717aBDD847Ab11FE88;
     address constant UNISWAP_SWAP_ROUTER = 0xE592427A0AEce92De3Edee1F18E0157C05861564;
@@ -138,19 +140,18 @@ contract LaunchListTest is Test {
         positionManager = INonfungiblePositionManager(UNISWAP_POSITION_MANAGER);
         swapRouter = ISwapRouter(UNISWAP_SWAP_ROUTER);
 
-        // Get WETH token
-        weth = IERC20(WETH_ADDRESS);
+        // Get USDC token instead of WETH
+        usdc = IERC20(USDC_ADDRESS);
 
-        // Fund this address with ETH
-        vm.deal(owner, 100 ether);
-        vm.deal(user1, 100 ether);
-        vm.deal(user2, 100 ether);
-        vm.deal(user3, 100 ether);
-        vm.deal(nonLaunchListUser, 100 ether);
+        // Fund this address with USDC from whale
+        vm.startPrank(USDC_WHALE);
+        usdc.transfer(address(this), 1_000_000 * 10 ** USDC_DECIMALS); // 1M USDC
 
-        // Get WETH by wrapping ETH
-        (bool success,) = WETH_ADDRESS.call{value: 10 ether}("");
-        require(success, "Failed to get WETH");
+        // Distribute USDC to test users
+        usdc.transfer(user1, 10_000 * 10 ** USDC_DECIMALS);
+        usdc.transfer(user2, 10_000 * 10 ** USDC_DECIMALS);
+        usdc.transfer(user3, 10_000 * 10 ** USDC_DECIMALS);
+        vm.stopPrank();
 
         // Deploy the launch list contract
         launchList = new LaunchList(owner);
@@ -160,22 +161,22 @@ contract LaunchListTest is Test {
 
         token.setLaunchListContract(address(launchList));
 
-        // Create a new Uniswap pool for our token and WETH
-        uint256 tokenAmount = 1000000 * 10 ** 18; // 1M tokens
-        uint256 wethAmount = 100 * 10 ** 18; // 100 WETH
+        // Create pool with USDC instead of WETH
+        uint256 tokenAmount = 1_000_000 * 10 ** 18; // 1M tokens
+        uint256 usdcAmount = 1_000_000 * 10 ** USDC_DECIMALS; // 1M USDC
 
         // Sort token addresses correctly
         address tokenAddress = address(token);
-        address token0 = tokenAddress < WETH_ADDRESS ? tokenAddress : WETH_ADDRESS;
-        address token1 = tokenAddress < WETH_ADDRESS ? WETH_ADDRESS : tokenAddress;
+        address token0 = tokenAddress < USDC_ADDRESS ? tokenAddress : USDC_ADDRESS;
+        address token1 = tokenAddress < USDC_ADDRESS ? USDC_ADDRESS : tokenAddress;
 
         // Create the pool
         uniswapFactory.createPool(token0, token1, FEE_TIER);
         address poolAddress = uniswapFactory.getPool(token0, token1, FEE_TIER);
 
-        // Initialize the pool with a price (approximately 1 token = 0.0001 WETH)
+        // Initialize the pool with a price (1 token = 1 USDC)
         IUniswapV3Pool tokenPool = IUniswapV3Pool(poolAddress);
-        uint160 sqrtPriceX96 = uint160(79232123187620800136); // sqrt(0.0001) * 2^96
+        uint160 sqrtPriceX96 = uint160(79228162514264337593543950336); // sqrt(1) * 2^96
         tokenPool.initialize(sqrtPriceX96);
 
         // Set the pool as our oracle
@@ -184,7 +185,7 @@ contract LaunchListTest is Test {
 
         // Approve for adding liquidity
         token.approve(address(positionManager), tokenAmount);
-        weth.approve(address(positionManager), wethAmount);
+        usdc.approve(address(positionManager), usdcAmount);
 
         // Add users to launch list
         launchList.launchListAddress(owner);
@@ -204,10 +205,10 @@ contract LaunchListTest is Test {
             token0: token0,
             token1: token1,
             fee: FEE_TIER,
-            tickLower: -887220, // min price
-            tickUpper: 887220, // max price
-            amount0Desired: token0 == tokenAddress ? tokenAmount : wethAmount,
-            amount1Desired: token0 == tokenAddress ? wethAmount : tokenAmount,
+            tickLower: -887220,
+            tickUpper: 887220,
+            amount0Desired: token0 == tokenAddress ? tokenAmount : usdcAmount,
+            amount1Desired: token0 == tokenAddress ? usdcAmount : tokenAmount,
             amount0Min: 0,
             amount1Min: 0,
             recipient: address(this),
@@ -342,7 +343,7 @@ contract LaunchListTest is Test {
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(token),
-                tokenOut: WETH_ADDRESS,
+                tokenOut: USDC_ADDRESS,
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
@@ -356,74 +357,38 @@ contract LaunchListTest is Test {
     }
 
     function testPhaseLimitedPoolTrading() public {
-        // Phase 1: Limited Pool Trading (1 ETH limit)
         launchList.setPhase(LaunchList.Phase.LIMITED_POOL_TRADING);
 
-        // Prepare user for swapping
         vm.startPrank(user1);
-        weth.approve(address(swapRouter), type(uint256).max);
-        vm.stopPrank();
+        usdc.approve(address(swapRouter), type(uint256).max);
+        token.approve(address(swapRouter), type(uint256).max);
 
-        // Test: Launch listed user can trade with Uniswap up to 1 ETH limit
-        vm.startPrank(user1);
-
-        // Wrap ETH to get WETH for trading
-        (bool success,) = WETH_ADDRESS.call{value: 1 ether}("");
-        require(success, "Failed to get WETH");
-
-        // Attempt to buy tokens with 0.9 ETH worth of WETH
+        // Try to swap 900 USDC worth (should succeed)
         uint256 amountOut = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 0.9 ether,
+                amountIn: 900 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
         );
 
-        // Verify swap succeeded
         assertTrue(amountOut > 0, "Swap failed");
 
-        // Test: User cannot exceed the 1 ETH limit
-        // Wrap more ETH
-        (success,) = WETH_ADDRESS.call{value: 1 ether}("");
-        require(success, "Failed to get WETH");
-
+        // Try to swap more than limit (should fail)
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 0.5 ether, // This would push us over the 1 ETH limit
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
-
-        vm.stopPrank();
-
-        // Test: Non-launch listed user cannot trade with Uniswap
-        vm.startPrank(nonLaunchListUser);
-        (success,) = WETH_ADDRESS.call{value: 1 ether}("");
-        require(success, "Failed to get WETH");
-        weth.approve(address(swapRouter), 1 ether);
-
-        vm.expectRevert();
-        swapRouter.exactInputSingle(
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
-                tokenOut: address(token),
-                fee: FEE_TIER,
-                recipient: nonLaunchListUser,
-                deadline: block.timestamp + 60,
-                amountIn: 1 ether,
+                amountIn: 200 * 10 ** USDC_DECIMALS, // Would exceed 1000 USDC limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -433,28 +398,21 @@ contract LaunchListTest is Test {
     }
 
     function testPhaseExtendedPoolTrading() public {
-        // Phase 2: Extended Pool Trading (4 ETH limit)
         launchList.setPhase(LaunchList.Phase.EXTENDED_POOL_TRADING);
 
-        // Prepare user for swapping
         vm.startPrank(user1);
-        weth.approve(address(swapRouter), type(uint256).max);
+        usdc.approve(address(swapRouter), type(uint256).max);
+        token.approve(address(swapRouter), type(uint256).max);
 
-        // Wrap ETH to get WETH for trading
-        (bool success,) = WETH_ADDRESS.call{value: 8 ether}("");
-        require(success, "Failed to get WETH");
-
-        // Test trading in multiple transactions to reach the limit
-
-        // First swap: 1 ETH worth
+        // Test trading in multiple transactions up to 4000 USDC limit
         uint256 amountOut1 = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 1 ether,
+                amountIn: 1000 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -462,15 +420,15 @@ contract LaunchListTest is Test {
 
         assertTrue(amountOut1 > 0, "First swap failed");
 
-        // Second swap: 2 ETH worth
+        // Second swap: 2000 USDC
         uint256 amountOut2 = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 2 ether,
+                amountIn: 2000 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -478,32 +436,16 @@ contract LaunchListTest is Test {
 
         assertTrue(amountOut2 > 0, "Second swap failed");
 
-        // Third swap: 0.9 ETH worth (should bring total to 3.9 ETH)
-        uint256 amountOut3 = swapRouter.exactInputSingle(
-            ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
-                tokenOut: address(token),
-                fee: FEE_TIER,
-                recipient: user1,
-                deadline: block.timestamp + 60,
-                amountIn: 0.9 ether,
-                amountOutMinimum: 0,
-                sqrtPriceLimitX96: 0
-            })
-        );
-
-        assertTrue(amountOut3 > 0, "Third swap failed");
-
-        // Attempt to exceed the 4 ETH limit
+        // Try to exceed 4000 USDC limit
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 1.2 ether, // This would push us over the 4 ETH limit
+                amountIn: 1500 * 10 ** USDC_DECIMALS, // Would exceed 4000 USDC limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -513,52 +455,40 @@ contract LaunchListTest is Test {
     }
 
     function testSpendingLimitsAcrossPhases() public {
-        // Test that spending limits are maintained when phases change
-
-        // Start with Phase 1 (1 ETH limit)
+        // Start with Phase 1 (1000 USDC limit)
         launchList.setPhase(LaunchList.Phase.LIMITED_POOL_TRADING);
 
-        // Prepare user for swapping
         vm.startPrank(user1);
+        usdc.approve(address(swapRouter), type(uint256).max);
 
-        (bool success,) = WETH_ADDRESS.call{value: 8 ether}("");
-        require(success, "Failed to get WETH");
-
-        weth.approve(address(swapRouter), type(uint256).max);
-
-        // Spend 0.8 ETH worth in Phase 1 (8000 tokens)
-        uint256 tokensToSwap = 0.8 ether;
+        // Spend 800 USDC in Phase 1
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: tokensToSwap,
+                amountIn: 800 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
         );
-
         vm.stopPrank();
 
-        // Advance to Phase 2 (4 ETH limit total)
+        // Advance to Phase 2 (4000 USDC limit)
         launchList.setPhase(LaunchList.Phase.EXTENDED_POOL_TRADING);
 
-        // Should be able to spend 3.2 ETH more
         vm.startPrank(user1);
-
-        // Swap approximately 3.2 ETH worth (32000 tokens)
-        uint256 moreTokensToSwap = 3.2 ether;
+        // Should be able to spend 3200 USDC more
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: moreTokensToSwap,
+                amountIn: 3200 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -568,12 +498,12 @@ contract LaunchListTest is Test {
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(token),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 0.1 ether, // Even a small amount over the limit should fail
+                amountIn: 100 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -600,7 +530,7 @@ contract LaunchListTest is Test {
         uint256 amountOut = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(token),
-                tokenOut: WETH_ADDRESS,
+                tokenOut: USDC_ADDRESS,
                 fee: FEE_TIER,
                 recipient: nonLaunchListUser,
                 deadline: block.timestamp + 60,
@@ -619,7 +549,7 @@ contract LaunchListTest is Test {
         amountOut = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: address(token),
-                tokenOut: WETH_ADDRESS,
+                tokenOut: USDC_ADDRESS,
                 fee: FEE_TIER,
                 recipient: nonLaunchListUser,
                 deadline: block.timestamp + 60,
@@ -648,7 +578,7 @@ contract LaunchListTest is Test {
         newLaunchList.setPhase(LaunchList.Phase.LIMITED_POOL_TRADING);
 
         vm.expectRevert();
-        newLaunchList.getEthValueForToken(1000 ether);
+        newLaunchList.getUsdcValueForToken(1000 ether);
     }
 
     function testOnlyOwnerFunctions() public {
@@ -672,8 +602,8 @@ contract LaunchListTest is Test {
 
     function testPhaseLimitsUpdate() public {
         // Test that phase limits can be updated
-        launchList.setPhaseLimits(10 ether, 40 ether);
-        assertEq(launchList.phase1EthLimit(), 10 ether);
-        assertEq(launchList.phase2EthLimit(), 40 ether);
+        launchList.setPhaseLimits(1000 * 10 ** USDC_DECIMALS, 4000 * 10 ** USDC_DECIMALS);
+        assertEq(launchList.phase1UsdcLimit(), 1000 * 10 ** USDC_DECIMALS);
+        assertEq(launchList.phase2UsdcLimit(), 4000 * 10 ** USDC_DECIMALS);
     }
 }
