@@ -52,7 +52,7 @@ contract LaunchList is Ownable {
 
     // Purchase limits by phase
     uint256 public phase1UsdcLimit = 1000 * 10 ** 6;
-    uint256 public phase2UsdcLimit = 4000 * 10 ** 6;
+    uint256 public phase2UsdcLimit = 9000 * 10 ** 6;
 
     // Add this state variable
     address public constant UNISWAP_QUOTER = 0x5e55C9e631FAE526cd4B0526C4818D6e0a9eF0e3;

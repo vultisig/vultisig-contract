@@ -404,7 +404,7 @@ contract LaunchListTest is Test {
         usdc.approve(address(swapRouter), type(uint256).max);
         token.approve(address(swapRouter), type(uint256).max);
 
-        // Test trading in multiple transactions up to 4000 USDC limit
+        // Test trading in multiple transactions up to 9000 USDC limit
         uint256 amountOut1 = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: USDC_ADDRESS,
@@ -436,7 +436,7 @@ contract LaunchListTest is Test {
 
         assertTrue(amountOut2 > 0, "Second swap failed");
 
-        // Try to exceed 4000 USDC limit
+        // Try to exceed 9000 USDC limit
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
@@ -445,7 +445,7 @@ contract LaunchListTest is Test {
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 1500 * 10 ** USDC_DECIMALS, // Would exceed 4000 USDC limit
+                amountIn: 8500 * 10 ** USDC_DECIMALS, // Would exceed 9000 USDC limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -476,7 +476,7 @@ contract LaunchListTest is Test {
         );
         vm.stopPrank();
 
-        // Advance to Phase 2 (4000 USDC limit)
+        // Advance to Phase 2 (9000 USDC limit)
         launchList.setPhase(LaunchList.Phase.EXTENDED_POOL_TRADING);
 
         vm.startPrank(user1);
@@ -488,7 +488,7 @@ contract LaunchListTest is Test {
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 3200 * 10 ** USDC_DECIMALS,
+                amountIn: 8200 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -602,8 +602,8 @@ contract LaunchListTest is Test {
 
     function testPhaseLimitsUpdate() public {
         // Test that phase limits can be updated
-        launchList.setPhaseLimits(1000 * 10 ** USDC_DECIMALS, 4000 * 10 ** USDC_DECIMALS);
+        launchList.setPhaseLimits(1000 * 10 ** USDC_DECIMALS, 9000 * 10 ** USDC_DECIMALS);
         assertEq(launchList.phase1UsdcLimit(), 1000 * 10 ** USDC_DECIMALS);
-        assertEq(launchList.phase2UsdcLimit(), 4000 * 10 ** USDC_DECIMALS);
+        assertEq(launchList.phase2UsdcLimit(), 9000 * 10 ** USDC_DECIMALS);
     }
 }

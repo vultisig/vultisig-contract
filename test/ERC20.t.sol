@@ -604,12 +604,12 @@ contract ERC20Test is Test {
 
         // Give user1 enough USDC to test the 4000 USDC limit
         vm.startPrank(USDC_WHALE);
-        usdc.transfer(user1, 5000 * 10 ** USDC_DECIMALS);
+        usdc.transfer(user1, 11_000 * 10 ** USDC_DECIMALS);
         vm.stopPrank();
 
         // User1 approves router to spend USDC
         vm.startPrank(user1);
-        usdc.approve(address(swapRouter), 5000 * 10 ** USDC_DECIMALS);
+        usdc.approve(address(swapRouter), 11_000 * 10 ** USDC_DECIMALS);
 
         // First swap: 3000 USDC worth (should succeed)
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
@@ -641,7 +641,7 @@ contract ERC20Test is Test {
         );
         assertTrue(amountOut2 > 0, "Second swap failed");
 
-        // Third swap: Should fail as it would exceed the 4000 USDC limit
+        // Third swap: Should fail as it would exceed the 9000 USDC limit
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
@@ -650,7 +650,7 @@ contract ERC20Test is Test {
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 200 * 10 ** USDC_DECIMALS,
+                amountIn: 6000 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
