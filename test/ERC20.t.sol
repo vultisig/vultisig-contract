@@ -641,7 +641,22 @@ contract ERC20Test is Test {
         );
         assertTrue(amountOut2 > 0, "Second swap failed");
 
-        // Third swap: Should fail as it would exceed the 9000 USDC limit
+        // Third swap: Should succeed as it's under the 10,000 USDC total limit (3900 + 6000 = 9900)
+        uint256 amountOut3 = swapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: USDC_ADDRESS,
+                tokenOut: address(tokenA),
+                fee: FEE_TIER,
+                recipient: user1,
+                deadline: block.timestamp + 60,
+                amountIn: 6000 * 10 ** USDC_DECIMALS,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        assertTrue(amountOut3 > 0, "Third swap failed");
+
+        // Fourth swap: Should fail as it would exceed the 10,000 USDC total limit
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
@@ -650,7 +665,7 @@ contract ERC20Test is Test {
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 6000 * 10 ** USDC_DECIMALS,
+                amountIn: 200 * 10 ** USDC_DECIMALS, // This would make total 10,100 USDC
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })

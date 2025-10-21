@@ -476,11 +476,11 @@ contract LaunchListTest is Test {
         );
         vm.stopPrank();
 
-        // Advance to Phase 2 (9000 USDC limit)
+        // Advance to Phase 2 (10,000 USDC total limit)
         launchList.setPhase(LaunchList.Phase.EXTENDED_POOL_TRADING);
 
         vm.startPrank(user1);
-        // Should be able to spend 3200 USDC more
+        // Should be able to spend 9200 USDC more (10,000 - 800 = 9,200)
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
                 tokenIn: USDC_ADDRESS,
@@ -488,7 +488,7 @@ contract LaunchListTest is Test {
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 8200 * 10 ** USDC_DECIMALS,
+                amountIn: 9200 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
