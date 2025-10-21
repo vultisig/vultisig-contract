@@ -34,7 +34,6 @@ contract LaunchList is Ownable {
         LIMITED_POOL_TRADING, // Phase 1: Launch list addresses can trade with pools up to 1 ETH
         EXTENDED_POOL_TRADING, // Phase 2: Launch list addresses can trade with pools up to 4 ETH
         PUBLIC // Phase 3: No restrictions
-
     }
 
     // Current launch phase
@@ -283,10 +282,8 @@ contract LaunchList is Ownable {
 
         // Phase 0: launch list only - recipient and sender must be on the launch list, or sender is adding liquidity
         if (currentPhase == Phase.LAUNCH_LIST_ONLY) {
-            return (
-                (isAddressOnLaunchList(to) && isAddressOnLaunchList(from))
-                    || (isAddressOnLaunchList(from) && isPoolOnLaunchList(to))
-            );
+            return ((isAddressOnLaunchList(to) && isAddressOnLaunchList(from))
+                    || (isAddressOnLaunchList(from) && isPoolOnLaunchList(to)));
         }
 
         // Phase 1 & 2: Launch list pools trading with USDC limits
@@ -294,7 +291,15 @@ contract LaunchList is Ownable {
             // If recipient is a launch list pool, check USDC spending limits
             if (isPoolOnLaunchList(from) && isAddressOnLaunchList(to)) {
                 uint256 usdcValue = getUsdcValueForToken(amount);
-                uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1UsdcLimit : phase2UsdcLimit;
+                uint256 limit;
+
+                if (currentPhase == Phase.LIMITED_POOL_TRADING) {
+                    // Phase 1: Can spend up to phase1UsdcLimit (1,000 USDC)
+                    limit = phase1UsdcLimit;
+                } else {
+                    // Phase 2: Can spend up to phase1UsdcLimit + phase2UsdcLimit (10,000 USDC total)
+                    limit = phase1UsdcLimit + phase2UsdcLimit;
+                }
 
                 if (addressUsdcSpent[to] + usdcValue <= limit) {
                     // Update user's USDC spent if the transaction is going through
@@ -331,15 +336,14 @@ contract LaunchList is Ownable {
         // Determine which token is USDC and which is our token
         (address tokenIn, address tokenOut) = token0 == USDC ? (token1, token0) : (token0, token1);
 
-        try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
-            IQuoter.QuoteExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                amountIn: tokenAmount,
-                fee: fee,
-                sqrtPriceLimitX96: 0
-            })
-        ) returns (uint256 amountReceived, uint160, uint32, uint256) {
+        try IQuoter(UNISWAP_QUOTER)
+            .quoteExactInputSingle(
+                IQuoter.QuoteExactInputSingleParams({
+                    tokenIn: tokenIn, tokenOut: tokenOut, amountIn: tokenAmount, fee: fee, sqrtPriceLimitX96: 0
+                })
+            ) returns (
+            uint256 amountReceived, uint160, uint32, uint256
+        ) {
             return amountReceived;
         } catch {
             // Fallback to initial price if quote fails

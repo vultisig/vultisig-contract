@@ -111,9 +111,8 @@ contract StakeSweeper is Ownable {
         uint256 amountOutMin = expectedOut > 0 ? (expectedOut * minOutPercentage) / 100 : 1;
 
         // Execute swap
-        uint256[] memory amounts = IUniswapRouter(defaultRouter).swapExactTokensForTokens(
-            _amountIn, amountOutMin, path, _recipient, block.timestamp + 1 hours
-        );
+        uint256[] memory amounts = IUniswapRouter(defaultRouter)
+            .swapExactTokensForTokens(_amountIn, amountOutMin, path, _recipient, block.timestamp + 1 hours);
 
         IERC20(_tokenIn).forceApprove(defaultRouter, 0);
         return amounts[amounts.length - 1];
