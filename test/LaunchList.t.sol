@@ -7,6 +7,7 @@ import {ERC20} from "../contracts/extensions/ERC20.sol";
 import {IUniswapV3Pool} from "../contracts/interfaces/IUniswapV3Pool.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts/access/IAccessControl.sol";
 import {Test} from "forge-std/Test.sol";
 
 // Uniswap V3 Factory Interface
@@ -585,16 +586,27 @@ contract LaunchListTest is Test {
         // Test that only owner can call restricted functions
         vm.startPrank(user1);
 
+        // Phase management functions still require owner
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         launchList.advancePhase();
 
         vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
         launchList.setPhase(LaunchList.Phase.PUBLIC);
 
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        // Whitelist functions now require WHITELIST_MANAGER_ROLE
+        bytes32 whitelistManagerRole = launchList.WHITELIST_MANAGER_ROLE();
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, user1, whitelistManagerRole
+            )
+        );
         launchList.launchListAddress(nonLaunchListUser);
 
-        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, user1));
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, user1, whitelistManagerRole
+            )
+        );
         launchList.launchListPool(nonLaunchListPool);
 
         vm.stopPrank();
@@ -605,5 +617,50 @@ contract LaunchListTest is Test {
         launchList.setPhaseLimits(1000 * 10 ** USDC_DECIMALS, 9000 * 10 ** USDC_DECIMALS);
         assertEq(launchList.phase1UsdcLimit(), 1000 * 10 ** USDC_DECIMALS);
         assertEq(launchList.phase2UsdcLimit(), 9000 * 10 ** USDC_DECIMALS);
+    }
+
+    function testWhitelistManagerRole() public {
+        // Test that WHITELIST_MANAGER_ROLE can manage whitelist
+        address whitelistManager = address(0x999);
+        address newUser = address(0x888);
+        address newPool = address(0x777);
+
+        // Grant WHITELIST_MANAGER_ROLE to whitelistManager
+        bytes32 whitelistManagerRole = launchList.WHITELIST_MANAGER_ROLE();
+        launchList.grantRole(whitelistManagerRole, whitelistManager);
+
+        // Verify the role was granted
+        assertTrue(launchList.hasRole(whitelistManagerRole, whitelistManager));
+
+        // Test that whitelistManager can add addresses and pools
+        vm.startPrank(whitelistManager);
+
+        launchList.launchListAddress(newUser);
+        assertTrue(launchList.isAddressOnLaunchList(newUser));
+
+        launchList.launchListPool(newPool);
+        assertTrue(launchList.isPoolOnLaunchList(newPool));
+
+        // Test removal
+        launchList.removeLaunchListAddress(newUser);
+        assertFalse(launchList.isAddressOnLaunchList(newUser));
+
+        launchList.removePoolFromLaunchList(newPool);
+        assertFalse(launchList.isPoolOnLaunchList(newPool));
+
+        vm.stopPrank();
+
+        // Test that revoking the role prevents access
+        launchList.revokeRole(whitelistManagerRole, whitelistManager);
+        assertFalse(launchList.hasRole(whitelistManagerRole, whitelistManager));
+
+        vm.startPrank(whitelistManager);
+        vm.expectRevert(
+            abi.encodeWithSelector(
+                IAccessControl.AccessControlUnauthorizedAccount.selector, whitelistManager, whitelistManagerRole
+            )
+        );
+        launchList.launchListAddress(newUser);
+        vm.stopPrank();
     }
 }

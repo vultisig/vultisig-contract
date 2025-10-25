@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./interfaces/IUniswapV3Pool.sol";
 
@@ -25,8 +26,11 @@ interface IQuoter {
  * @title LaunchList
  * @dev Manages launch list addresses, pools, and launch phases for a token
  */
-contract LaunchList is Ownable {
+contract LaunchList is Ownable, AccessControl {
     using EnumerableSet for EnumerableSet.AddressSet;
+
+    // Role for managing whitelist (launch list addresses and pools)
+    bytes32 public constant WHITELIST_MANAGER_ROLE = keccak256("WHITELIST_MANAGER_ROLE");
 
     // Phase definitions
     enum Phase {
@@ -76,6 +80,13 @@ contract LaunchList is Ownable {
 
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.LAUNCH_LIST_ONLY;
+
+        // Grant the DEFAULT_ADMIN_ROLE to the owner
+        _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
+
+        // Grant WHITELIST_MANAGER_ROLE to the owner initially
+        _grantRole(WHITELIST_MANAGER_ROLE, initialOwner);
+
         emit PhaseAdvanced(currentPhase);
         emit PhaseLimitsUpdated(0, 0, phase1UsdcLimit, phase2UsdcLimit);
     }
@@ -115,9 +126,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds an address to the launch list
      * @param addr Address to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListAddress(address addr) external onlyOwner {
+    function launchListAddress(address addr) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(addr != address(0), "Cannot add zero address");
         require(_launchListAddresses.add(addr), "Address already on launch list");
         emit LaunchListAddressAdded(addr);
@@ -126,9 +137,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds multiple addresses to the launch list
      * @param addrs Array of addresses to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListAddresses(address[] calldata addrs) external onlyOwner {
+    function launchListAddresses(address[] calldata addrs) external onlyRole(WHITELIST_MANAGER_ROLE) {
         for (uint256 i = 0; i < addrs.length; i++) {
             if (addrs[i] != address(0) && _launchListAddresses.add(addrs[i])) {
                 emit LaunchListAddressAdded(addrs[i]);
@@ -139,9 +150,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Removes an address from the launch list
      * @param addr Address to remove
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function removeLaunchListAddress(address addr) external onlyOwner {
+    function removeLaunchListAddress(address addr) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(_launchListAddresses.remove(addr), "Address not on launch list");
         emit LaunchListAddressRemoved(addr);
     }
@@ -149,9 +160,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds a pool to the launch list
      * @param pool Address of the pool to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListPool(address pool) external onlyOwner {
+    function launchListPool(address pool) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(pool != address(0), "Cannot add zero address");
         require(_launchListPools.add(pool), "Pool already on launch list");
         emit LaunchListPoolAdded(pool);
@@ -160,9 +171,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds multiple pools to the launch list
      * @param pools Array of pool addresses to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListPools(address[] calldata pools) external onlyOwner {
+    function launchListPools(address[] calldata pools) external onlyRole(WHITELIST_MANAGER_ROLE) {
         for (uint256 i = 0; i < pools.length; i++) {
             if (pools[i] != address(0) && _launchListPools.add(pools[i])) {
                 emit LaunchListPoolAdded(pools[i]);
@@ -173,9 +184,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Removes a pool from the launch list
      * @param pool Address of the pool to remove
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function removePoolFromLaunchList(address pool) external onlyOwner {
+    function removePoolFromLaunchList(address pool) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(_launchListPools.remove(pool), "Pool not on launch list");
         emit PoolRemovedFromLaunchList(pool);
     }
