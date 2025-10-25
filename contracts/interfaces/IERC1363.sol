@@ -88,9 +88,7 @@ interface IERC1363 {
      * @param data Additional data with no specified format, sent in call to `to`.
      * @return A boolean value indicating the operation succeeded unless throwing.
      */
-    function transferFromAndCall(address from, address to, uint256 value, bytes calldata data)
-        external
-        returns (bool);
+    function transferFromAndCall(address from, address to, uint256 value, bytes calldata data) external returns (bool);
 
     /**
      * @dev Sets a `value` amount of tokens as the allowance of `spender` over the caller's tokens and then calls `IERC1363Spender::onApprovalReceived` on `spender`.

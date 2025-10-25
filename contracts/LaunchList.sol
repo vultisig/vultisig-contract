@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/access/AccessControl.sol";
 import "@openzeppelin/contracts/utils/structs/EnumerableSet.sol";
 import "./interfaces/IUniswapV3Pool.sol";
 
@@ -25,8 +26,11 @@ interface IQuoter {
  * @title LaunchList
  * @dev Manages launch list addresses, pools, and launch phases for a token
  */
-contract LaunchList is Ownable {
+contract LaunchList is Ownable, AccessControl {
     using EnumerableSet for EnumerableSet.AddressSet;
+
+    // Role for managing whitelist (launch list addresses and pools)
+    bytes32 public constant WHITELIST_MANAGER_ROLE = keccak256("WHITELIST_MANAGER_ROLE");
 
     // Phase definitions
     enum Phase {
@@ -34,7 +38,6 @@ contract LaunchList is Ownable {
         LIMITED_POOL_TRADING, // Phase 1: Launch list addresses can trade with pools up to 1 ETH
         EXTENDED_POOL_TRADING, // Phase 2: Launch list addresses can trade with pools up to 4 ETH
         PUBLIC // Phase 3: No restrictions
-
     }
 
     // Current launch phase
@@ -47,16 +50,17 @@ contract LaunchList is Ownable {
     // Uniswap V3 Oracle pool address
     address public uniswapV3OraclePool;
 
-    // Mapping of user addresses to their ETH spent during limited phases
-    mapping(address => uint256) public addressEthSpent;
+    // Mapping of user addresses to their USDC spent during limited phases
+    mapping(address => uint256) public addressUsdcSpent;
 
     // Purchase limits by phase
-    uint256 public phase1EthLimit = 1 ether;
-    uint256 public phase2EthLimit = 4 ether;
+    uint256 public phase1UsdcLimit = 1000 * 10 ** 6;
+    uint256 public phase2UsdcLimit = 9000 * 10 ** 6;
 
     // Add this state variable
     address public constant UNISWAP_QUOTER = 0x5e55C9e631FAE526cd4B0526C4818D6e0a9eF0e3;
-    address public constant WETH = 0xC02aaA39b223FE8D0A0e5C4F27eAD9083C756Cc2; // Mainnet WETH address
+    address public constant USDC = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48; // Mainnet USDC
+    uint8 public constant USDC_DECIMALS = 6;
 
     // Events
     event PhaseAdvanced(Phase newPhase);
@@ -65,9 +69,9 @@ contract LaunchList is Ownable {
     event LaunchListPoolAdded(address indexed pool);
     event PoolRemovedFromLaunchList(address indexed pool);
     event OraclePoolUpdated(address indexed newOraclePool);
-    event EthSpent(address indexed user, uint256 amount, uint256 total);
+    event UsdcSpent(address indexed user, uint256 amount, uint256 total);
     event PhaseLimitsUpdated(
-        uint256 oldPhase1EthLimit, uint256 oldPhase2EthLimit, uint256 newPhase1EthLimit, uint256 newPhase2EthLimit
+        uint256 oldPhase1UsdcLimit, uint256 oldPhase2UsdcLimit, uint256 newPhase1UsdcLimit, uint256 newPhase2UsdcLimit
     );
     /**
      * @dev Constructor
@@ -76,16 +80,23 @@ contract LaunchList is Ownable {
 
     constructor(address initialOwner) Ownable(initialOwner) {
         currentPhase = Phase.LAUNCH_LIST_ONLY;
+
+        // Grant the DEFAULT_ADMIN_ROLE to the owner
+        _grantRole(DEFAULT_ADMIN_ROLE, initialOwner);
+
+        // Grant WHITELIST_MANAGER_ROLE to the owner initially
+        _grantRole(WHITELIST_MANAGER_ROLE, initialOwner);
+
         emit PhaseAdvanced(currentPhase);
-        emit PhaseLimitsUpdated(0, 0, phase1EthLimit, phase2EthLimit);
+        emit PhaseLimitsUpdated(0, 0, phase1UsdcLimit, phase2UsdcLimit);
     }
 
-    function setPhaseLimits(uint256 phase1EthLimit_, uint256 phase2EthLimit_) external onlyOwner {
-        uint256 oldPhase1EthLimit = phase1EthLimit;
-        uint256 oldPhase2EthLimit = phase2EthLimit;
-        phase1EthLimit = phase1EthLimit_;
-        phase2EthLimit = phase2EthLimit_;
-        emit PhaseLimitsUpdated(oldPhase1EthLimit, oldPhase2EthLimit, phase1EthLimit_, phase2EthLimit_);
+    function setPhaseLimits(uint256 phase1UsdcLimit_, uint256 phase2UsdcLimit_) external onlyOwner {
+        uint256 oldPhase1UsdcLimit = phase1UsdcLimit;
+        uint256 oldPhase2UsdcLimit = phase2UsdcLimit;
+        phase1UsdcLimit = phase1UsdcLimit_;
+        phase2UsdcLimit = phase2UsdcLimit_;
+        emit PhaseLimitsUpdated(oldPhase1UsdcLimit, oldPhase2UsdcLimit, phase1UsdcLimit_, phase2UsdcLimit_);
     }
 
     // ==================== Phase Management ====================
@@ -115,9 +126,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds an address to the launch list
      * @param addr Address to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListAddress(address addr) external onlyOwner {
+    function launchListAddress(address addr) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(addr != address(0), "Cannot add zero address");
         require(_launchListAddresses.add(addr), "Address already on launch list");
         emit LaunchListAddressAdded(addr);
@@ -126,9 +137,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds multiple addresses to the launch list
      * @param addrs Array of addresses to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListAddresses(address[] calldata addrs) external onlyOwner {
+    function launchListAddresses(address[] calldata addrs) external onlyRole(WHITELIST_MANAGER_ROLE) {
         for (uint256 i = 0; i < addrs.length; i++) {
             if (addrs[i] != address(0) && _launchListAddresses.add(addrs[i])) {
                 emit LaunchListAddressAdded(addrs[i]);
@@ -139,9 +150,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Removes an address from the launch list
      * @param addr Address to remove
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function removeLaunchListAddress(address addr) external onlyOwner {
+    function removeLaunchListAddress(address addr) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(_launchListAddresses.remove(addr), "Address not on launch list");
         emit LaunchListAddressRemoved(addr);
     }
@@ -149,9 +160,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds a pool to the launch list
      * @param pool Address of the pool to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListPool(address pool) external onlyOwner {
+    function launchListPool(address pool) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(pool != address(0), "Cannot add zero address");
         require(_launchListPools.add(pool), "Pool already on launch list");
         emit LaunchListPoolAdded(pool);
@@ -160,9 +171,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Adds multiple pools to the launch list
      * @param pools Array of pool addresses to add
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function launchListPools(address[] calldata pools) external onlyOwner {
+    function launchListPools(address[] calldata pools) external onlyRole(WHITELIST_MANAGER_ROLE) {
         for (uint256 i = 0; i < pools.length; i++) {
             if (pools[i] != address(0) && _launchListPools.add(pools[i])) {
                 emit LaunchListPoolAdded(pools[i]);
@@ -173,9 +184,9 @@ contract LaunchList is Ownable {
     /**
      * @dev Removes a pool from the launch list
      * @param pool Address of the pool to remove
-     * @notice Can only be called by the owner
+     * @notice Can only be called by addresses with WHITELIST_MANAGER_ROLE
      */
-    function removePoolFromLaunchList(address pool) external onlyOwner {
+    function removePoolFromLaunchList(address pool) external onlyRole(WHITELIST_MANAGER_ROLE) {
         require(_launchListPools.remove(pool), "Pool not on launch list");
         emit PoolRemovedFromLaunchList(pool);
     }
@@ -282,50 +293,50 @@ contract LaunchList is Ownable {
 
         // Phase 0: launch list only - recipient and sender must be on the launch list, or sender is adding liquidity
         if (currentPhase == Phase.LAUNCH_LIST_ONLY) {
-            return (
-                (isAddressOnLaunchList(to) && isAddressOnLaunchList(from))
-                    || (isAddressOnLaunchList(from) && isPoolOnLaunchList(to))
-            );
+            return ((isAddressOnLaunchList(to) && isAddressOnLaunchList(from))
+                    || (isAddressOnLaunchList(from) && isPoolOnLaunchList(to)));
         }
 
-        // Phase 1 & 2: Launch list pools trading with ETH limits
+        // Phase 1 & 2: Launch list pools trading with USDC limits
         if (currentPhase == Phase.LIMITED_POOL_TRADING || currentPhase == Phase.EXTENDED_POOL_TRADING) {
-            // If recipient is a launch list pool, check ETH spending limits
+            // If recipient is a launch list pool, check USDC spending limits
             if (isPoolOnLaunchList(from) && isAddressOnLaunchList(to)) {
-                uint256 ethValue = getEthValueForToken(amount);
-                uint256 limit = (currentPhase == Phase.LIMITED_POOL_TRADING) ? phase1EthLimit : phase2EthLimit;
+                uint256 usdcValue = getUsdcValueForToken(amount);
+                uint256 limit;
 
-                if (addressEthSpent[to] + ethValue <= limit) {
-                    // Update user's ETH spent if the transaction is going through
-                    addressEthSpent[to] += ethValue;
-                    emit EthSpent(to, ethValue, addressEthSpent[to]);
+                if (currentPhase == Phase.LIMITED_POOL_TRADING) {
+                    // Phase 1: Can spend up to phase1UsdcLimit (1,000 USDC)
+                    limit = phase1UsdcLimit;
+                } else {
+                    // Phase 2: Can spend up to phase1UsdcLimit + phase2UsdcLimit (10,000 USDC total)
+                    limit = phase1UsdcLimit + phase2UsdcLimit;
+                }
+
+                if (addressUsdcSpent[to] + usdcValue <= limit) {
+                    // Update user's USDC spent if the transaction is going through
+                    addressUsdcSpent[to] += usdcValue;
+                    emit UsdcSpent(to, usdcValue, addressUsdcSpent[to]);
                     return true;
                 }
                 return false;
             } else if (isAddressOnLaunchList(from) && isPoolOnLaunchList(to)) {
-                // If sender is a launch list address and recipient is a launch list pool, allow transaction
                 return true;
             } else if (isPoolOnLaunchList(from) && isPoolOnLaunchList(to)) {
-                // If both sender and recipient are launch list pools, allow transaction
-                // to support routers and solvers
                 return true;
             }
-
-            // If sending to address that's not a launch list pool, deny transaction
             return false;
         }
 
-        // Default: deny transaction
         return false;
     }
 
     /**
-     * @dev Gets the ETH value for a token amount using Uniswap V3 Quoter, or returns the starting
+     * @dev Gets the USDC value for a token amount using Uniswap V3 Quoter, or returns the starting
      * amount if no trades have been made on the pool
      * @param tokenAmount Amount of tokens
-     * @return ethValue Equivalent ETH value
+     * @return usdcValue Equivalent USDC value
      */
-    function getEthValueForToken(uint256 tokenAmount) public view returns (uint256) {
+    function getUsdcValueForToken(uint256 tokenAmount) public view returns (uint256) {
         require(uniswapV3OraclePool != address(0), "Oracle pool not set");
 
         // Get the token addresses from the pool
@@ -333,24 +344,21 @@ contract LaunchList is Ownable {
         address token1 = IUniswapV3Pool(uniswapV3OraclePool).token1();
         uint24 fee = IUniswapV3Pool(uniswapV3OraclePool).fee();
 
-        // Determine which token is WETH and which is our token
-        (address tokenIn, address tokenOut) = token0 == WETH ? (token1, token0) : (token0, token1);
+        // Determine which token is USDC and which is our token
+        (address tokenIn, address tokenOut) = token0 == USDC ? (token1, token0) : (token0, token1);
 
-        try IQuoter(UNISWAP_QUOTER).quoteExactInputSingle(
-            IQuoter.QuoteExactInputSingleParams({
-                tokenIn: tokenIn,
-                tokenOut: tokenOut,
-                amountIn: tokenAmount,
-                fee: fee,
-                sqrtPriceLimitX96: 0
-            })
-        ) returns (
-            uint256 amountReceived, uint160 sqrtPriceX96After, uint32 initializedTicksCrossed, uint256 gasEstimate
+        try IQuoter(UNISWAP_QUOTER)
+            .quoteExactInputSingle(
+                IQuoter.QuoteExactInputSingleParams({
+                    tokenIn: tokenIn, tokenOut: tokenOut, amountIn: tokenAmount, fee: fee, sqrtPriceLimitX96: 0
+                })
+            ) returns (
+            uint256 amountReceived, uint160, uint32, uint256
         ) {
             return amountReceived;
         } catch {
             // Fallback to initial price if quote fails
-            return tokenAmount / 10 ** 18; // 0.0001 ETH per token initial price
+            return (tokenAmount * 10 ** USDC_DECIMALS) / 10 ** 18; // 1 token = 1 USDC initial price
         }
     }
 }

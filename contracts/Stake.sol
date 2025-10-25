@@ -312,7 +312,11 @@ contract Stake is IERC1363Spender, ReentrancyGuard, Ownable {
      * @param value The amount of tokens to be spent
      * @return bytes4 The function selector to confirm the transaction is accepted
      */
-    function onApprovalReceived(address owner, uint256 value, bytes calldata /* data */ )
+    function onApprovalReceived(
+        address owner,
+        uint256 value,
+        bytes calldata /* data */
+    )
         external
         override
         nonReentrant

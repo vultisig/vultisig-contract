@@ -146,6 +146,11 @@ contract ERC20Test is Test {
     // Fee tier for pool (0.3%)
     uint24 constant FEE_TIER = 3000;
 
+    // Update constants
+    address constant USDC_ADDRESS = 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48;
+    uint8 constant USDC_DECIMALS = 6;
+    address constant USDC_WHALE = 0x7713974908Be4BEd47172370115e8b1219F4A5f0;
+
     function setUp() public {
         // Try to use Alchemy if available, otherwise fall back to Infura
         string memory alchemyKey;
@@ -194,8 +199,18 @@ contract ERC20Test is Test {
         // Get WETH and USDC tokens
         weth = IERC20(WETH_ADDRESS);
 
+        // Get USDC token instead of WETH
+        usdc = IERC20(USDC_ADDRESS);
+
+        // Get USDC from whale
+        vm.startPrank(USDC_WHALE);
+        usdc.transfer(address(this), 10_000_000 * 10 ** USDC_DECIMALS); // 1M USDC
+        vm.stopPrank();
+
         // Fund this address with ETH, WETH, and USDC for testing
         vm.deal(owner, 100000 ether);
+        // Fund with USDC now
+        usdc.transfer(owner, 1_000_000 * 10 ** USDC_DECIMALS); // 1M USDC
 
         // Get WETH by wrapping ETH
         vm.startPrank(owner);
@@ -235,38 +250,38 @@ contract ERC20Test is Test {
         tokenA.transfer(owner, 10000 ether);
 
         // Get a portion of tokenA to add to Uniswap pool with WETH
-        uint256 tokenAAmount = 1000000 * 10 ** 18; // 1M tokens
-        uint256 wethAmount = 100 * 10 ** 18; // 100 WETH
+        uint256 tokenAAmount = 1_000_000 * 10 ** 18; // 1M tokens
+        uint256 usdcAmount = 1_000_000 * 10 ** USDC_DECIMALS; // 1M USDC
 
         // Approve tokens for adding liquidity
-        weth.approve(address(positionManager), wethAmount);
+        usdc.approve(address(positionManager), usdcAmount);
         tokenA.approve(address(positionManager), tokenAAmount);
 
-        // Add liquidity to Uniswap - creating a new pool with tokenA and WETH
+        // Add liquidity to Uniswap - creating a new pool with tokenA and USDC
         address tokenAAddress = address(tokenA);
 
         // Make sure token addresses are sorted
-        address token0 = tokenAAddress < WETH_ADDRESS ? tokenAAddress : WETH_ADDRESS;
-        address token1 = tokenAAddress < WETH_ADDRESS ? WETH_ADDRESS : tokenAAddress;
+        address token0 = tokenAAddress < USDC_ADDRESS ? tokenAAddress : USDC_ADDRESS;
+        address token1 = tokenAAddress < USDC_ADDRESS ? USDC_ADDRESS : tokenAAddress;
 
         // Create the pool
         uniswapFactory.createPool(token0, token1, FEE_TIER);
         address tokenAPoolAddress = uniswapFactory.getPool(token0, token1, FEE_TIER);
 
-        // Initialize the pool with a price (assume 1 tokenA = 0.0001 WETH)
+        // Initialize the pool with a price (1 tokenA = 1 USDC)
         IUniswapV3Pool tokenAPool = IUniswapV3Pool(tokenAPoolAddress);
         launchList.setUniswapV3OraclePool(address(tokenAPoolAddress));
 
         // Add to launch list
         launchList.launchListPool(tokenAPoolAddress);
 
-        // sqrt(0.0001) * 2^96
-        uint160 sqrtPriceX96 = uint160(79232123187620800136);
+        // sqrt(1) * 2^96
+        uint160 sqrtPriceX96 = uint160(79228162514264337593543950336);
         tokenAPool.initialize(sqrtPriceX96);
 
-        // Get WETH balance of owner
-        uint256 wethBalance = weth.balanceOf(owner);
-        console2.log("WETH balance of owner:", wethBalance);
+        // Get balances for logging
+        uint256 usdcBalance = usdc.balanceOf(owner);
+        console2.log("USDC balance of owner:", usdcBalance);
         uint256 tokenABalance = tokenA.balanceOf(owner);
         console2.log("TokenA balance of owner:", tokenABalance);
 
@@ -275,10 +290,10 @@ contract ERC20Test is Test {
             token0: token0,
             token1: token1,
             fee: FEE_TIER,
-            tickLower: -887220, // min price
-            tickUpper: 887220, // max price
-            amount0Desired: token0 == tokenAAddress ? tokenAAmount : wethAmount,
-            amount1Desired: token0 == tokenAAddress ? wethAmount : tokenAAmount,
+            tickLower: -887220,
+            tickUpper: 887220,
+            amount0Desired: token0 == tokenAAddress ? tokenAAmount : usdcAmount,
+            amount1Desired: token0 == tokenAAddress ? usdcAmount : tokenAAmount,
             amount0Min: 0,
             amount1Min: 0,
             recipient: owner,
@@ -536,44 +551,44 @@ contract ERC20Test is Test {
     }
 
     function testRealUniswapPoolWithLaunchList() public {
-        // This test demonstrates interaction with a real Uniswap pool while respecting launch list restrictions
-
         // Set launch list to Phase 1 (Limited trading)
         vm.prank(owner);
         launchList.setPhase(LaunchList.Phase.LIMITED_POOL_TRADING);
 
-        // User1 needs WETH to buy tokens
-        deal(WETH_ADDRESS, user1, 2 ether); // Give user1 2 ETH worth of WETH
+        // User1 needs USDC to buy tokens
+        vm.startPrank(USDC_WHALE);
+        usdc.transfer(user1, 2000 * 10 ** USDC_DECIMALS); // Give user1 2000 USDC
+        vm.stopPrank();
 
-        // User1 approves router to spend WETH
+        // User1 approves router to spend USDC
         vm.startPrank(user1);
-        IERC20(WETH_ADDRESS).approve(address(swapRouter), 2 ether);
+        usdc.approve(address(swapRouter), 2000 * 10 ** USDC_DECIMALS);
 
-        // First swap: Should succeed as it's under 1 ETH limit
+        // First swap: Should succeed as it's under 1000 USDC limit
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: WETH_ADDRESS,
+            tokenIn: USDC_ADDRESS,
             tokenOut: address(tokenA),
             fee: FEE_TIER,
             recipient: user1,
             deadline: block.timestamp + 60,
-            amountIn: 0.9 ether, // Under the 1 ETH limit
-            amountOutMinimum: 0, // No minimum for test
-            sqrtPriceLimitX96: 0 // No price limit
+            amountIn: 900 * 10 ** USDC_DECIMALS, // Under the 1000 USDC limit
+            amountOutMinimum: 0,
+            sqrtPriceLimitX96: 0
         });
 
         uint256 amountOut = swapRouter.exactInputSingle(swapParams);
         assertTrue(amountOut > 0, "First swap failed");
 
-        // Second swap: Should fail as it would exceed the 1 ETH limit
+        // Second swap: Should fail as it would exceed the 1000 USDC limit
         vm.expectRevert();
         swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(tokenA),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 0.2 ether, // This would push us over the 1 ETH limit
+                amountIn: 200 * 10 ** USDC_DECIMALS, // This would push us over the 1000 USDC limit
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -583,27 +598,27 @@ contract ERC20Test is Test {
     }
 
     function testExtendedPoolTradingWithRealUniswap() public {
-        // Test the increased limit in Phase 2
-
         // Set launch list to Phase 2 (Extended trading)
         vm.prank(owner);
         launchList.setPhase(LaunchList.Phase.EXTENDED_POOL_TRADING);
 
-        // Give user1 enough WETH to test the 4 ETH limit
-        deal(WETH_ADDRESS, user1, 5 ether);
+        // Give user1 enough USDC to test the 4000 USDC limit
+        vm.startPrank(USDC_WHALE);
+        usdc.transfer(user1, 11_000 * 10 ** USDC_DECIMALS);
+        vm.stopPrank();
 
-        // User1 approves router to spend WETH
+        // User1 approves router to spend USDC
         vm.startPrank(user1);
-        IERC20(WETH_ADDRESS).approve(address(swapRouter), 5 ether);
+        usdc.approve(address(swapRouter), 11_000 * 10 ** USDC_DECIMALS);
 
-        // First swap: 3 ETH worth (should succeed)
+        // First swap: 3000 USDC worth (should succeed)
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: WETH_ADDRESS,
+            tokenIn: USDC_ADDRESS,
             tokenOut: address(tokenA),
             fee: FEE_TIER,
             recipient: user1,
             deadline: block.timestamp + 60,
-            amountIn: 3 ether, // Under the 4 ETH limit
+            amountIn: 3000 * 10 ** USDC_DECIMALS, // Under the 4000 USDC limit
             amountOutMinimum: 0,
             sqrtPriceLimitX96: 0
         });
@@ -611,31 +626,46 @@ contract ERC20Test is Test {
         uint256 amountOut = swapRouter.exactInputSingle(swapParams);
         assertTrue(amountOut > 0, "First swap failed");
 
-        // Second swap: 0.9 ETH worth (should succeed)
+        // Second swap: 900 USDC worth (should succeed)
         uint256 amountOut2 = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(tokenA),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 0.9 ether, // Still under the 4 ETH total limit
+                amountIn: 900 * 10 ** USDC_DECIMALS,
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
         );
         assertTrue(amountOut2 > 0, "Second swap failed");
 
-        // Third swap: Should fail as it would exceed the 4 ETH limit
-        vm.expectRevert();
-        swapRouter.exactInputSingle(
+        // Third swap: Should succeed as it's under the 10,000 USDC total limit (3900 + 6000 = 9900)
+        uint256 amountOut3 = swapRouter.exactInputSingle(
             ISwapRouter.ExactInputSingleParams({
-                tokenIn: WETH_ADDRESS,
+                tokenIn: USDC_ADDRESS,
                 tokenOut: address(tokenA),
                 fee: FEE_TIER,
                 recipient: user1,
                 deadline: block.timestamp + 60,
-                amountIn: 0.2 ether, // This would push us over the 4 ETH limit
+                amountIn: 6000 * 10 ** USDC_DECIMALS,
+                amountOutMinimum: 0,
+                sqrtPriceLimitX96: 0
+            })
+        );
+        assertTrue(amountOut3 > 0, "Third swap failed");
+
+        // Fourth swap: Should fail as it would exceed the 10,000 USDC total limit
+        vm.expectRevert();
+        swapRouter.exactInputSingle(
+            ISwapRouter.ExactInputSingleParams({
+                tokenIn: USDC_ADDRESS,
+                tokenOut: address(tokenA),
+                fee: FEE_TIER,
+                recipient: user1,
+                deadline: block.timestamp + 60,
+                amountIn: 200 * 10 ** USDC_DECIMALS, // This would make total 10,100 USDC
                 amountOutMinimum: 0,
                 sqrtPriceLimitX96: 0
             })
@@ -645,27 +675,27 @@ contract ERC20Test is Test {
     }
 
     function testPublicPhaseNoRestrictions() public {
-        // Test that in PUBLIC phase, there are no restrictions
-
         // Set launch list to PUBLIC phase
         vm.prank(owner);
         launchList.setPhase(LaunchList.Phase.PUBLIC);
 
-        // Give non-launch listed user some WETH
-        deal(WETH_ADDRESS, nonLaunchListUser, 10 ether);
+        // Give non-launch listed user some USDC
+        vm.startPrank(USDC_WHALE);
+        usdc.transfer(nonLaunchListUser, 10000 * 10 ** USDC_DECIMALS);
+        vm.stopPrank();
 
         // Non-launch listed user should be able to swap any amount
         vm.startPrank(nonLaunchListUser);
-        IERC20(WETH_ADDRESS).approve(address(swapRouter), 10 ether);
+        usdc.approve(address(swapRouter), 10000 * 10 ** USDC_DECIMALS);
 
         // Execute swap with a large amount (should succeed in PUBLIC phase)
         ISwapRouter.ExactInputSingleParams memory swapParams = ISwapRouter.ExactInputSingleParams({
-            tokenIn: WETH_ADDRESS,
+            tokenIn: USDC_ADDRESS,
             tokenOut: address(tokenA),
             fee: FEE_TIER,
             recipient: nonLaunchListUser,
             deadline: block.timestamp + 60,
-            amountIn: 5 ether, // Large amount, should work in PUBLIC phase
+            amountIn: 5000 * 10 ** USDC_DECIMALS, // Large amount, should work in PUBLIC phase
             amountOutMinimum: 0,
             sqrtPriceLimitX96: 0
         });
