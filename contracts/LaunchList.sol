@@ -32,6 +32,9 @@ contract LaunchList is Ownable, AccessControl {
     // Role for managing whitelist (launch list addresses and pools)
     bytes32 public constant WHITELIST_MANAGER_ROLE = keccak256("WHITELIST_MANAGER_ROLE");
 
+    // Role for authorized contracts that can call isTransactionAllowed (e.g., token contracts)
+    bytes32 public constant LAUNCHLIST_SPENDER_ROLE = keccak256("LAUNCHLIST_SPENDER_ROLE");
+
     // Phase definitions
     enum Phase {
         LAUNCH_LIST_ONLY, // Phase 0: Launch list addresses can only send to other launch list addresses
@@ -279,8 +282,13 @@ contract LaunchList is Ownable, AccessControl {
      * @param to Recipient address
      * @param amount Amount being transferred
      * @return bool True if the transaction is allowed
+     * @notice Can only be called by contracts with LAUNCHLIST_SPENDER_ROLE to prevent DoS attacks
      */
-    function isTransactionAllowed(address from, address to, uint256 amount) external returns (bool) {
+    function isTransactionAllowed(address from, address to, uint256 amount)
+        external
+        onlyRole(LAUNCHLIST_SPENDER_ROLE)
+        returns (bool)
+    {
         // Phase 3: Public - No restrictions
         if (currentPhase == Phase.PUBLIC) {
             return true;
