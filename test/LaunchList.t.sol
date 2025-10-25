@@ -32,9 +32,9 @@ interface INonfungiblePositionManager {
         uint256 deadline;
     }
 
-    function mint(
-        MintParams calldata params
-    ) external returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
+    function mint(MintParams calldata params)
+        external
+        returns (uint256 tokenId, uint128 liquidity, uint256 amount0, uint256 amount1);
 }
 
 // Uniswap V3 Router Interface
@@ -312,11 +312,8 @@ contract LaunchListTest is Test {
         // Test getting pool at index
         address poolAtIndex = launchList.getLaunchListPoolAtIndex(0);
         assertTrue(
-            poolAtIndex == pool1 ||
-                poolAtIndex == pool2 ||
-                poolAtIndex == address(uniswapPool) ||
-                poolAtIndex == address(swapRouter) ||
-                poolAtIndex == address(positionManager)
+            poolAtIndex == pool1 || poolAtIndex == pool2 || poolAtIndex == address(uniswapPool)
+                || poolAtIndex == address(swapRouter) || poolAtIndex == address(positionManager)
         );
     }
 
@@ -604,18 +601,14 @@ contract LaunchListTest is Test {
         bytes32 whitelistManagerRole = launchList.WHITELIST_MANAGER_ROLE();
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                user1,
-                whitelistManagerRole
+                IAccessControl.AccessControlUnauthorizedAccount.selector, user1, whitelistManagerRole
             )
         );
         launchList.launchListAddress(nonLaunchListUser);
 
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                user1,
-                whitelistManagerRole
+                IAccessControl.AccessControlUnauthorizedAccount.selector, user1, whitelistManagerRole
             )
         );
         launchList.launchListPool(nonLaunchListPool);
@@ -668,9 +661,7 @@ contract LaunchListTest is Test {
         vm.startPrank(whitelistManager);
         vm.expectRevert(
             abi.encodeWithSelector(
-                IAccessControl.AccessControlUnauthorizedAccount.selector,
-                whitelistManager,
-                whitelistManagerRole
+                IAccessControl.AccessControlUnauthorizedAccount.selector, whitelistManager, whitelistManagerRole
             )
         );
         launchList.launchListAddress(newUser);
