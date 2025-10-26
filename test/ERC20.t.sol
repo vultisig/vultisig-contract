@@ -240,6 +240,9 @@ contract ERC20Test is Test {
 
         tokenA.setLaunchListContract(address(launchList));
 
+        // Authorize the token contract to call isTransactionAllowed
+        launchList.grantRole(launchList.LAUNCHLIST_SPENDER_ROLE(), address(tokenA));
+
         // Deploy mock receiver and spender
         mockReceiver = new MockERC1363Receiver();
         mockSpender = new MockERC1363Spender();

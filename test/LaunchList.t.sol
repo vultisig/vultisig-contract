@@ -160,7 +160,11 @@ contract LaunchListTest is Test {
         // Deploy a test token that uses the launch list
         token = new ERC20("Test Token", "TEST");
 
+        // Set launch list contract
         token.setLaunchListContract(address(launchList));
+
+        // Manually authorize the token contract to call isTransactionAllowed
+        launchList.grantRole(launchList.LAUNCHLIST_SPENDER_ROLE(), address(token));
 
         // Create pool with USDC instead of WETH
         uint256 tokenAmount = 1_000_000 * 10 ** 18; // 1M tokens
@@ -662,5 +666,51 @@ contract LaunchListTest is Test {
         );
         launchList.launchListAddress(newUser);
         vm.stopPrank();
+    }
+
+    function testLaunchListSpenderRoleProtection() public {
+        // Test that isTransactionAllowed is protected from public DoS attacks
+        address attacker = address(0x666);
+
+        // Setup oracle pool first
+        launchList.setUniswapV3OraclePool(address(uniswapPool));
+        launchList.setPhase(LaunchList.Phase.LIMITED_POOL_TRADING);
+
+        // Attacker should not be able to call isTransactionAllowed directly
+        bytes32 spenderRole = launchList.LAUNCHLIST_SPENDER_ROLE();
+        vm.startPrank(attacker);
+        vm.expectRevert(
+            abi.encodeWithSelector(IAccessControl.AccessControlUnauthorizedAccount.selector, attacker, spenderRole)
+        );
+        launchList.isTransactionAllowed(address(uniswapPool), user1, 1000 ether);
+        vm.stopPrank();
+
+        // Test manual authorization of token contracts
+        vm.startPrank(owner);
+        ERC20 newToken = new ERC20("Test Token 2", "TEST2");
+
+        // Before authorization, token should not have the role
+        assertFalse(launchList.hasRole(spenderRole, address(newToken)));
+
+        // Set launch list contract
+        newToken.setLaunchListContract(address(launchList));
+
+        // Token still shouldn't have the role until manually authorized
+        assertFalse(launchList.hasRole(spenderRole, address(newToken)));
+
+        // Manually authorize the token contract using grantRole
+        launchList.grantRole(spenderRole, address(newToken));
+
+        // Now token should have the role
+        assertTrue(launchList.hasRole(spenderRole, address(newToken)));
+        vm.stopPrank();
+
+        // Test manual authorization/deauthorization using standard AccessControl functions
+        address anotherContract = address(0x777);
+        launchList.grantRole(spenderRole, anotherContract);
+        assertTrue(launchList.hasRole(spenderRole, anotherContract));
+
+        launchList.revokeRole(spenderRole, anotherContract);
+        assertFalse(launchList.hasRole(spenderRole, anotherContract));
     }
 }
