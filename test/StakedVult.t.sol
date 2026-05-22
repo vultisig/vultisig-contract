@@ -194,9 +194,7 @@ contract StakedVultTest is Test {
         _depositFor(alice, 100 ether);
         vm.prank(alice);
         vm.expectRevert(
-            abi.encodeWithSelector(
-                IERC20Errors.ERC20InsufficientBalance.selector, alice, 100 ether, 150 ether
-            )
+            abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 100 ether, 150 ether)
         );
         svult.requestUnstake(150 ether);
     }

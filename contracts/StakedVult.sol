@@ -42,12 +42,8 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, Ownable, ReentrancyGuard {
     mapping(uint256 => UnstakeRequest) private _requests;
 
     event CooldownDurationSet(uint256 previousDuration, uint256 newDuration);
-    event UnstakeRequested(
-        address indexed owner, uint256 indexed requestId, uint256 amount, uint256 maturity
-    );
-    event UnstakeClaimed(
-        address indexed owner, uint256 indexed requestId, address indexed receiver, uint256 amount
-    );
+    event UnstakeRequested(address indexed owner, uint256 indexed requestId, uint256 amount, uint256 maturity);
+    event UnstakeClaimed(address indexed owner, uint256 indexed requestId, address indexed receiver, uint256 amount);
 
     error CooldownActive();
     error RequestNotMature(uint256 maturity);
@@ -86,11 +82,7 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, Ownable, ReentrancyGuard {
      * @dev Disabled while a cooldown is active; callers must use
      * {requestUnstake} and {claim}.
      */
-    function withdrawTo(address account, uint256 value)
-        public
-        override
-        returns (bool)
-    {
+    function withdrawTo(address account, uint256 value) public override returns (bool) {
         if (cooldownDuration != 0) revert CooldownActive();
         return super.withdrawTo(account, value);
     }
@@ -102,19 +94,14 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, Ownable, ReentrancyGuard {
      * When `cooldownDuration` is zero the request matures immediately and can
      * be claimed in the same block.
      */
-    function requestUnstake(uint256 amount)
-        external
-        nonReentrant
-        returns (uint256 requestId)
-    {
+    function requestUnstake(uint256 amount) external nonReentrant returns (uint256 requestId) {
         if (amount == 0) revert ZeroAmount();
 
         address sender = _msgSender();
         uint256 maturity = block.timestamp + cooldownDuration;
 
         requestId = _nextRequestId++;
-        _requests[requestId] =
-            UnstakeRequest({owner: sender, maturity: uint64(maturity), amount: amount});
+        _requests[requestId] = UnstakeRequest({owner: sender, maturity: uint64(maturity), amount: amount});
         totalPendingUnstake += amount;
 
         emit UnstakeRequested(sender, requestId, amount, maturity);
