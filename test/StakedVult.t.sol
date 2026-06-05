@@ -76,6 +76,7 @@ contract StakedVultTest is Test {
         _depositFor(alice, 100 ether);
         assertEq(svult.balanceOf(alice), 100 ether);
         assertEq(svult.totalSupply(), 100 ether);
+        assertEq(svult.activeSupply(), 100 ether);
         assertEq(vult.balanceOf(address(svult)), 100 ether);
     }
 
@@ -220,6 +221,32 @@ contract StakedVultTest is Test {
             abi.encodeWithSelector(IERC20Errors.ERC20InsufficientBalance.selector, alice, 100 ether, 150 ether)
         );
         svult.requestUnstake(150 ether);
+    }
+
+    function test_DirectTransferToEscrowReverts() public {
+        _depositFor(alice, 100 ether);
+
+        vm.prank(alice);
+        vm.expectRevert(StakedVult.DirectTransferToEscrow.selector);
+        svult.transfer(address(svult), 1 ether);
+    }
+
+    function test_DirectTransferFromToEscrowReverts() public {
+        _depositFor(alice, 100 ether);
+
+        vm.prank(alice);
+        svult.approve(bob, 1 ether);
+
+        vm.prank(bob);
+        vm.expectRevert(StakedVult.DirectTransferToEscrow.selector);
+        svult.transferFrom(alice, address(svult), 1 ether);
+    }
+
+    function test_ZeroValueDirectTransferToEscrowIsAllowed() public {
+        _depositFor(alice, 100 ether);
+
+        vm.prank(alice);
+        assertTrue(svult.transfer(address(svult), 0));
     }
 
     function test_RequestUnstake_AssignsIncreasingIds() public {
@@ -428,6 +455,45 @@ contract StakedVultTest is Test {
         assertEq(svult.totalSupply(), vult.balanceOf(address(svult)));
     }
 
+    function test_RecoverSurplus_MintsBackedSVult() public {
+        _depositFor(alice, 100 ether);
+
+        vm.prank(owner);
+        vult.transfer(address(svult), 10 ether);
+
+        assertEq(svult.totalSupply(), 100 ether);
+        assertEq(vult.balanceOf(address(svult)), 110 ether);
+
+        vm.expectEmit(true, false, false, true, address(svult));
+        emit StakedVult.SurplusRecovered(owner, 10 ether);
+        vm.prank(owner);
+        uint256 recovered = svult.recoverSurplus(owner);
+
+        assertEq(recovered, 10 ether);
+        assertEq(svult.balanceOf(owner), 10 ether);
+        assertEq(svult.totalSupply(), 110 ether);
+        assertEq(svult.activeSupply(), 110 ether);
+        assertEq(svult.totalSupply(), vult.balanceOf(address(svult)));
+    }
+
+    function test_RecoverSurplus_OnlyOwner() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(Ownable.OwnableUnauthorizedAccount.selector, alice));
+        svult.recoverSurplus(alice);
+    }
+
+    function test_RecoverSurplus_RevertsForZeroAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(StakedVult.ZeroAddress.selector);
+        svult.recoverSurplus(address(0));
+    }
+
+    function test_RecoverSurplus_RevertsForEscrowAddress() public {
+        vm.prank(owner);
+        vm.expectRevert(StakedVult.DirectTransferToEscrow.selector);
+        svult.recoverSurplus(address(svult));
+    }
+
     // --------------------------------------------------------------------- //
     // cancelUnstake
     // --------------------------------------------------------------------- //
@@ -556,6 +622,7 @@ contract StakedVultTest is Test {
         // Escrowing sVULT moves it out of alice's balance -> votes drop immediately.
         _requestUnstake(alice, 40 ether);
         assertEq(svult.getVotes(alice), 60 ether);
+        assertEq(svult.activeSupply(), 60 ether);
         // The contract itself never self-delegates, so escrowed weight is inert.
         assertEq(svult.getVotes(address(svult)), 0);
     }
@@ -571,6 +638,7 @@ contract StakedVultTest is Test {
         vm.prank(alice);
         svult.cancelUnstake(requestId);
         assertEq(svult.getVotes(alice), 100 ether);
+        assertEq(svult.activeSupply(), 100 ether);
     }
 
     function test_Votes_Claim_DoesNotRestoreVotingPower() public {
@@ -583,6 +651,38 @@ contract StakedVultTest is Test {
         svult.claim(requestId, alice); // burns escrow, sends VULT out
         assertEq(svult.getVotes(alice), 60 ether);
         assertEq(svult.totalSupply(), 60 ether);
+        assertEq(svult.activeSupply(), 60 ether);
+    }
+
+    function test_Votes_PastTotalSupplyExcludesCoolingSupply() public {
+        vm.warp(1_000_000);
+        _depositFor(alice, 100 ether);
+
+        vm.prank(owner);
+        svult.setCooldownDuration(7 days);
+
+        vm.warp(1_000_100);
+        uint256 requestId = _requestUnstake(alice, 40 ether);
+        uint256 coolingSnapshot = block.timestamp;
+
+        assertEq(svult.totalSupply(), 100 ether);
+        assertEq(svult.totalPendingUnstake(), 40 ether);
+        assertEq(svult.activeSupply(), 60 ether);
+
+        vm.warp(coolingSnapshot + 1);
+        assertEq(svult.getPastTotalSupply(coolingSnapshot), 60 ether);
+
+        vm.warp(coolingSnapshot + 7 days);
+        vm.prank(alice);
+        svult.claim(requestId, alice);
+        uint256 claimedSnapshot = block.timestamp;
+
+        assertEq(svult.totalSupply(), 60 ether);
+        assertEq(svult.totalPendingUnstake(), 0);
+        assertEq(svult.activeSupply(), 60 ether);
+
+        vm.warp(claimedSnapshot + 1);
+        assertEq(svult.getPastTotalSupply(claimedSnapshot), 60 ether);
     }
 
     function test_Votes_PastVotesSnapshotIsImmutableToLaterTransfer() public {

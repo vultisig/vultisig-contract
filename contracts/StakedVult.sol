@@ -12,6 +12,7 @@ import {Nonces} from "@openzeppelin/contracts/utils/Nonces.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Ownable2Step} from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import {Checkpoints} from "@openzeppelin/contracts/utils/structs/Checkpoints.sol";
 
 /**
  * @title StakedVult (sVULT)
@@ -38,6 +39,7 @@ import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol
  */
 contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, ReentrancyGuard {
     using SafeERC20 for IERC20;
+    using Checkpoints for Checkpoints.Trace208;
 
     struct UnstakeRequest {
         address owner;
@@ -58,11 +60,13 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
 
     uint256 private _nextRequestId = 1;
     mapping(uint256 => UnstakeRequest) private _requests;
+    Checkpoints.Trace208 private _activeSupplyCheckpoints;
 
     event CooldownDurationSet(uint256 previousDuration, uint256 newDuration);
     event UnstakeRequested(address indexed owner, uint256 indexed requestId, uint256 amount, uint256 maturity);
     event UnstakeClaimed(address indexed owner, uint256 indexed requestId, address indexed receiver, uint256 amount);
     event UnstakeCancelled(address indexed owner, uint256 indexed requestId, uint256 amount);
+    event SurplusRecovered(address indexed account, uint256 amount);
 
     error CooldownActive();
     error CooldownTooLong(uint256 maxCooldown);
@@ -71,6 +75,7 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
     error NotRequestOwner(address caller, address owner);
     error ZeroAmount();
     error ZeroAddress();
+    error DirectTransferToEscrow();
 
     constructor(IERC20 vult, address initialOwner)
         ERC20("Staked VULT", "sVULT")
@@ -98,6 +103,18 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
     function withdrawTo(address account, uint256 value) public override returns (bool) {
         if (cooldownDuration != 0) revert CooldownActive();
         return super.withdrawTo(account, value);
+    }
+
+    /**
+     * @notice Mint sVULT for underlying VULT sent directly to this contract.
+     * @dev Restores the wrapper accounting after accidental surplus deposits.
+     */
+    function recoverSurplus(address account) external onlyOwner returns (uint256 amount) {
+        if (account == address(0)) revert ZeroAddress();
+        if (account == address(this)) revert DirectTransferToEscrow();
+
+        amount = _recover(account);
+        emit SurplusRecovered(account, amount);
     }
 
     /**
@@ -188,6 +205,11 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
         return request.owner != address(0) && block.timestamp >= request.maturity;
     }
 
+    /// @notice Current governance supply, excluding sVULT that is cooling down.
+    function activeSupply() public view returns (uint256) {
+        return totalSupply() - totalPendingUnstake;
+    }
+
     // --------------------------------------------------------------------- //
     // ERC-6372 clock: timestamp-based checkpoints
     // --------------------------------------------------------------------- //
@@ -203,6 +225,14 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
         return "mode=timestamp";
     }
 
+    /**
+     * @notice Historical governance supply, excluding sVULT that was cooling down
+     * at `timepoint`.
+     */
+    function getPastTotalSupply(uint256 timepoint) public view override returns (uint256) {
+        return _activeSupplyCheckpoints.upperLookupRecent(_validateTimepoint(timepoint));
+    }
+
     // --------------------------------------------------------------------- //
     // Multiple-inheritance resolution
     // --------------------------------------------------------------------- //
@@ -215,6 +245,13 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
         return ERC20Wrapper.decimals();
     }
 
+    /// @dev Bound wrapped supply by the underlying VULT supply and the ERC20Votes checkpoint cap.
+    function _maxSupply() internal view override returns (uint256) {
+        uint256 underlyingSupply = underlying().totalSupply();
+        uint256 votesCap = type(uint208).max;
+        return underlyingSupply < votesCap ? underlyingSupply : votesCap;
+    }
+
     /**
      * @dev Route balance changes through {ERC20Votes} so voting checkpoints stay in sync,
      * then default brand-new holders to self-delegation so a deposit grants immediate
@@ -225,10 +262,34 @@ contract StakedVult is ERC20Wrapper, ERC20Permit, ERC20Votes, Ownable2Step, Reen
      * no delegate set, so an explicit {delegate} is never overridden.
      */
     function _update(address from, address to, uint256 value) internal override(ERC20, ERC20Votes) {
+        if (value != 0 && to == address(this) && totalPendingUnstake != balanceOf(address(this)) + value) {
+            revert DirectTransferToEscrow();
+        }
+
         super._update(from, to, value);
-        if (to != address(0) && to != address(this) && delegates(to) == address(0)) {
+        _updateActiveSupplyCheckpoints(from, to, value);
+        if (value != 0 && to != address(0) && to != address(this) && delegates(to) == address(0)) {
             _delegate(to, to);
         }
+    }
+
+    function _updateActiveSupplyCheckpoints(address from, address to, uint256 value) private {
+        if (value == 0) return;
+
+        bool fromActive = _isActiveSupplyAccount(from);
+        bool toActive = _isActiveSupplyAccount(to);
+        if (fromActive == toActive) return;
+
+        uint256 currentActiveSupply = _activeSupplyCheckpoints.latest();
+        _writeActiveSupplyCheckpoint(toActive ? currentActiveSupply + value : currentActiveSupply - value);
+    }
+
+    function _writeActiveSupplyCheckpoint(uint256 newActiveSupply) private {
+        _activeSupplyCheckpoints.push(clock(), SafeCast.toUint208(newActiveSupply));
+    }
+
+    function _isActiveSupplyAccount(address account) private view returns (bool) {
+        return account != address(0) && account != address(this);
     }
 
     /// @dev `nonces` is reached via both {ERC20Permit} and {ERC20Votes} (shared {Nonces} base).
