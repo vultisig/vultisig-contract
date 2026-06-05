@@ -139,9 +139,32 @@ contract StakedVultTest is Test {
         assertEq(svult.cooldownDuration(), 5 days);
         svult.setCooldownDuration(0);
         assertEq(svult.cooldownDuration(), 0);
-        svult.setCooldownDuration(type(uint64).max);
-        assertEq(svult.cooldownDuration(), type(uint64).max);
+        svult.setCooldownDuration(svult.MAX_COOLDOWN());
+        assertEq(svult.cooldownDuration(), svult.MAX_COOLDOWN());
         vm.stopPrank();
+    }
+
+    function test_SetCooldownDuration_RevertsAboveMax() public {
+        uint256 max = svult.MAX_COOLDOWN();
+        vm.prank(owner);
+        vm.expectRevert(abi.encodeWithSelector(StakedVult.CooldownTooLong.selector, max));
+        svult.setCooldownDuration(max + 1);
+    }
+
+    /// @dev Regression for the silent uint64 maturity truncation: the MAX_COOLDOWN
+    /// cap keeps `block.timestamp + cooldownDuration` well inside uint64, so a
+    /// maxed-out cooldown produces a far-future (not wrapped) maturity.
+    function test_MaxCooldown_DoesNotTruncateMaturity() public {
+        vm.warp(1_700_000_000);
+        uint256 maxCd = svult.MAX_COOLDOWN();
+        _depositFor(alice, 100 ether);
+        vm.prank(owner);
+        svult.setCooldownDuration(maxCd);
+
+        uint256 requestId = _requestUnstake(alice, 10 ether);
+        (, uint256 maturity,) = svult.getUnstakeRequest(requestId);
+        assertEq(maturity, block.timestamp + maxCd);
+        assertFalse(svult.isClaimable(requestId));
     }
 
     // --------------------------------------------------------------------- //
@@ -406,6 +429,228 @@ contract StakedVultTest is Test {
     }
 
     // --------------------------------------------------------------------- //
+    // cancelUnstake
+    // --------------------------------------------------------------------- //
+
+    function test_CancelUnstake_ReturnsEscrowAndEmits() public {
+        _depositFor(alice, 100 ether);
+        vm.prank(owner);
+        svult.setCooldownDuration(7 days);
+
+        uint256 requestId = _requestUnstake(alice, 40 ether);
+        assertEq(svult.balanceOf(alice), 60 ether);
+        assertEq(svult.balanceOf(address(svult)), 40 ether);
+        assertEq(svult.totalPendingUnstake(), 40 ether);
+
+        vm.expectEmit(true, true, false, true, address(svult));
+        emit StakedVult.UnstakeCancelled(alice, requestId, 40 ether);
+        vm.prank(alice);
+        svult.cancelUnstake(requestId);
+
+        // sVULT back with the holder; no VULT moved; invariant intact.
+        assertEq(svult.balanceOf(alice), 100 ether);
+        assertEq(svult.balanceOf(address(svult)), 0);
+        assertEq(svult.totalPendingUnstake(), 0);
+        assertEq(svult.totalSupply(), vult.balanceOf(address(svult)));
+        assertEq(vult.balanceOf(alice), USER_BALANCE - 100 ether);
+    }
+
+    function test_CancelUnstake_AfterMaturity_Allowed() public {
+        _depositFor(alice, 100 ether);
+        vm.prank(owner);
+        svult.setCooldownDuration(1 days);
+
+        uint256 requestId = _requestUnstake(alice, 30 ether);
+        vm.warp(block.timestamp + 1 days);
+        assertTrue(svult.isClaimable(requestId));
+
+        vm.prank(alice);
+        svult.cancelUnstake(requestId);
+        assertEq(svult.balanceOf(alice), 100 ether);
+    }
+
+    function test_CancelUnstake_RevertsForNonOwner() public {
+        _depositFor(alice, 100 ether);
+        uint256 requestId = _requestUnstake(alice, 10 ether);
+
+        vm.prank(bob);
+        vm.expectRevert(abi.encodeWithSelector(StakedVult.NotRequestOwner.selector, bob, alice));
+        svult.cancelUnstake(requestId);
+    }
+
+    function test_CancelUnstake_RevertsForUnknown() public {
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(StakedVult.RequestUnknown.selector, 7));
+        svult.cancelUnstake(7);
+    }
+
+    function test_CancelUnstake_ThenClaimReverts() public {
+        _depositFor(alice, 100 ether);
+        uint256 requestId = _requestUnstake(alice, 10 ether);
+
+        vm.prank(alice);
+        svult.cancelUnstake(requestId);
+
+        vm.prank(alice);
+        vm.expectRevert(abi.encodeWithSelector(StakedVult.RequestUnknown.selector, requestId));
+        svult.claim(requestId, alice);
+    }
+
+    // --------------------------------------------------------------------- //
+    // ERC20Votes: clock, delegation, checkpoints, escrow-removes-votes
+    // --------------------------------------------------------------------- //
+
+    function test_Clock_IsTimestampMode() public view {
+        assertEq(svult.clock(), uint48(block.timestamp));
+        assertEq(svult.CLOCK_MODE(), "mode=timestamp");
+    }
+
+    function test_Votes_AutoSelfDelegateOnDeposit() public {
+        _depositFor(alice, 100 ether);
+        // Depositing grants immediate voting power — no separate delegate() call needed.
+        assertEq(svult.delegates(alice), alice);
+        assertEq(svult.getVotes(alice), 100 ether);
+    }
+
+    function test_Votes_TransferAutoDelegatesNewHolder() public {
+        _depositFor(alice, 100 ether);
+        // carol has never touched the token; receiving sVULT auto-self-delegates her.
+        vm.prank(alice);
+        svult.transfer(carol, 40 ether);
+
+        assertEq(svult.delegates(carol), carol);
+        assertEq(svult.getVotes(carol), 40 ether);
+        assertEq(svult.getVotes(alice), 60 ether);
+    }
+
+    function test_Votes_UserCanRedelegateAfterAutoDelegate() public {
+        _depositFor(alice, 100 ether);
+        assertEq(svult.getVotes(alice), 100 ether); // auto self
+
+        // Holder overrides the default and delegates to bob.
+        vm.prank(alice);
+        svult.delegate(bob);
+        assertEq(svult.getVotes(alice), 0);
+        assertEq(svult.getVotes(bob), 100 ether); // bob votes with alice's weight, holds no tokens
+        assertEq(svult.balanceOf(bob), 0);
+    }
+
+    function test_Votes_EscrowContractIsNeverSelfDelegated() public {
+        _depositFor(alice, 100 ether);
+        vm.prank(owner);
+        svult.setCooldownDuration(7 days);
+        _requestUnstake(alice, 40 ether);
+
+        // The cooldown vault must never gain voting power from escrowed sVULT.
+        assertEq(svult.delegates(address(svult)), address(0));
+        assertEq(svult.getVotes(address(svult)), 0);
+    }
+
+    function test_Votes_RequestUnstake_RemovesVotingPower() public {
+        _depositFor(alice, 100 ether);
+        assertEq(svult.getVotes(alice), 100 ether);
+
+        vm.prank(owner);
+        svult.setCooldownDuration(7 days);
+
+        // Escrowing sVULT moves it out of alice's balance -> votes drop immediately.
+        _requestUnstake(alice, 40 ether);
+        assertEq(svult.getVotes(alice), 60 ether);
+        // The contract itself never self-delegates, so escrowed weight is inert.
+        assertEq(svult.getVotes(address(svult)), 0);
+    }
+
+    function test_Votes_CancelUnstake_RestoresVotingPower() public {
+        _depositFor(alice, 100 ether);
+        vm.prank(owner);
+        svult.setCooldownDuration(7 days);
+
+        uint256 requestId = _requestUnstake(alice, 40 ether);
+        assertEq(svult.getVotes(alice), 60 ether);
+
+        vm.prank(alice);
+        svult.cancelUnstake(requestId);
+        assertEq(svult.getVotes(alice), 100 ether);
+    }
+
+    function test_Votes_Claim_DoesNotRestoreVotingPower() public {
+        _depositFor(alice, 100 ether);
+
+        uint256 requestId = _requestUnstake(alice, 40 ether); // cooldown 0 -> mature
+        assertEq(svult.getVotes(alice), 60 ether);
+
+        vm.prank(alice);
+        svult.claim(requestId, alice); // burns escrow, sends VULT out
+        assertEq(svult.getVotes(alice), 60 ether);
+        assertEq(svult.totalSupply(), 60 ether);
+    }
+
+    function test_Votes_PastVotesSnapshotIsImmutableToLaterTransfer() public {
+        // Auto-self-delegation checkpoint lands at deposit time, t=1_000_000.
+        vm.warp(1_000_000);
+        _depositFor(alice, 100 ether);
+
+        // Exit at t=1_000_200 (zeroes her live votes).
+        vm.warp(1_000_200);
+        vm.prank(alice);
+        svult.withdrawTo(alice, 100 ether);
+
+        // Query from t=1_000_300 at a snapshot strictly between deposit and exit.
+        vm.warp(1_000_300);
+        uint256 snapshot = 1_000_100;
+        assertEq(svult.getVotes(alice), 0);
+
+        // Her historical weight at the snapshot is unchanged — the anti-double-vote guarantee.
+        assertEq(svult.getPastVotes(alice, snapshot), 100 ether);
+        assertEq(svult.getPastTotalSupply(snapshot), 100 ether);
+    }
+
+    function test_Votes_DepositForOther_CreditsRecipientNotDepositor() public {
+        // depositFor(bob) mints to bob; bob is auto-self-delegated, alice gets nothing.
+        vm.startPrank(alice);
+        vult.approve(address(svult), 50 ether);
+        svult.depositFor(bob, 50 ether);
+        vm.stopPrank();
+
+        assertEq(svult.delegates(bob), bob);
+        assertEq(svult.getVotes(bob), 50 ether);
+        assertEq(svult.getVotes(alice), 0);
+    }
+
+    // --------------------------------------------------------------------- //
+    // ERC20Permit: nonces() resolves across the shared Nonces base (Permit + Votes)
+    // --------------------------------------------------------------------- //
+
+    function test_Permit_SetsAllowanceAndConsumesNonce() public {
+        uint256 ownerKey = 0xA11CE;
+        address permitOwner = vm.addr(ownerKey);
+        _depositFor(alice, 10 ether);
+        vm.prank(alice);
+        svult.transfer(permitOwner, 10 ether);
+
+        assertEq(svult.nonces(permitOwner), 0);
+
+        uint256 deadline = block.timestamp + 1 hours;
+        bytes32 structHash = keccak256(
+            abi.encode(
+                keccak256("Permit(address owner,address spender,uint256 value,uint256 nonce,uint256 deadline)"),
+                permitOwner,
+                bob,
+                5 ether,
+                svult.nonces(permitOwner),
+                deadline
+            )
+        );
+        bytes32 digest = keccak256(abi.encodePacked("\x19\x01", svult.DOMAIN_SEPARATOR(), structHash));
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(ownerKey, digest);
+
+        svult.permit(permitOwner, bob, 5 ether, deadline, v, r, s);
+
+        assertEq(svult.allowance(permitOwner, bob), 5 ether);
+        assertEq(svult.nonces(permitOwner), 1);
+    }
+
+    // --------------------------------------------------------------------- //
     // Fuzz
     // --------------------------------------------------------------------- //
 
@@ -424,6 +669,7 @@ contract StakedVultTest is Test {
 
     function testFuzz_RoundTrip_WithCooldown(uint128 amount, uint32 cooldown) public {
         amount = uint128(bound(uint256(amount), 1, USER_BALANCE));
+        cooldown = uint32(bound(uint256(cooldown), 0, svult.MAX_COOLDOWN()));
         vm.prank(owner);
         svult.setCooldownDuration(cooldown);
 
