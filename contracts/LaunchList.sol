@@ -358,8 +358,8 @@ contract LaunchList is Ownable, AccessControl {
         try IQuoter(UNISWAP_QUOTER)
             .quoteExactInputSingle(
                 IQuoter.QuoteExactInputSingleParams({
-                    tokenIn: tokenIn, tokenOut: tokenOut, amountIn: tokenAmount, fee: fee, sqrtPriceLimitX96: 0
-                })
+                tokenIn: tokenIn, tokenOut: tokenOut, amountIn: tokenAmount, fee: fee, sqrtPriceLimitX96: 0
+            })
             ) returns (
             uint256 amountReceived, uint160, uint32, uint256
         ) {
